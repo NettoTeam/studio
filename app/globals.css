@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+/* HIERARQUIA DE FONTES — Netto: Anton (display/títulos) · Inter (corpo) · Montserrat (apoio). Auto-hospedadas. */
+@font-face { font-family: "Anton"; src: url("/fonts/Anton-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter-Variable.ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Montserrat"; src: url("/fonts/Montserrat-Variable.ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
+/* aliases: as refs antigas no código continuam funcionando, agora apontando pras fontes novas */
+@font-face { font-family: "Bebas Neue"; src: url("/fonts/Anton-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Helvetica Neue N2"; src: url("/fonts/Inter-Variable.ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
+
+:root {
+  /* camadas de elevação — base GRAFITE (neutro quente) da N² Squad; cada uma 1 passo mais clara */
+  --dg-bg: #0e0e11;        /* fundo do app (grafite quase-preto) */
+  --dg-surface: #17171b;   /* painel (1º nível) */
+  --dg-raised: #1f1f24;    /* caixa/card interno (2º nível) */
+  --dg-raised-2: #29292f;  /* item dentro do card (3º nível) */
+  --dg-sunken: #0a0a0c;    /* inputs (afundado) */
+  /* linhas */
+  --dg-line: rgba(255,255,255,0.10);
+  --dg-line-soft: rgba(255,255,255,0.055);
+  --dg-line-strong: rgba(255,255,255,0.18);
+  /* marca — ROSA N² Squad, agora o ÚNICO acento forte sobre o grafite (assinatura) */
+  --dg-red: #ef476f;
+  --dg-red-soft: rgba(239,71,111,0.16);
+  /* texto em níveis (hierarquia de contraste) — neutros quentes */
+  --dg-white: #ffffff;     /* títulos / forte */
+  --dg-text: #e4e4e9;      /* corpo */
+  --dg-grey: #a0a0ac;      /* secundário */
+  --dg-faint: #6c6c77;     /* meta / legenda */
+  /* profundidade */
+  --dg-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 14px 34px -20px rgba(0,0,0,0.9);
+  --dg-shadow-hover: 0 1px 0 rgba(255,255,255,0.07) inset, 0 18px 40px -18px rgba(0,0,0,0.95);
+  --r-lg: 14px;
+  --r-md: 10px;
+  --r-sm: 8px;
+}
+
+html, body {
+  background:
+    radial-gradient(1100px 600px at 88% -12%, rgba(239,71,111,0.11), transparent 55%),
+    radial-gradient(820px 520px at 3% 108%, rgba(239,71,111,0.05), transparent 60%),
+    var(--dg-bg);
+  background-attachment: fixed;
+  color: var(--dg-text);
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: 0.1px;
+}
+
+/* ---- Scrollbar discreta ---- */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); background-clip: padding-box; }
+
+/* ---- Tipografia ---- */
+.dg-title { font-family: "Bebas Neue", sans-serif; letter-spacing: 0.5px; color: var(--dg-white); }
+.dg-kicker { font-family: "Bebas Neue", sans-serif; letter-spacing: 2.2px; text-transform: uppercase; color: var(--dg-grey); font-size: 12px; }
+.dg-meta { color: var(--dg-faint); font-size: 12px; }
+.dg-strong { color: var(--dg-white); }
+/* cabeçalho de seção — uma régua fina + rótulo, pra agrupar conteúdo com elegância */
+.dg-section {
+  display: flex; align-items: center; gap: 12px;
+  font-family: "Bebas Neue", sans-serif; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--dg-grey); font-size: 13px; margin: 4px 0 2px;
+}
+.dg-section::after { content: ""; flex: 1; height: 1px; background: var(--dg-line-soft); }
+
+/* ---- Sidebar ---- */
+.dg-sidebar {
+  width: 256px; flex-shrink: 0;
+  background: linear-gradient(180deg, #19191d, #0c0c0e);
+  border-right: 1px solid var(--dg-line-soft);
+  box-shadow: inset 0 3px 0 var(--dg-red);   /* assinatura: fio rosa no topo */
+  padding: 26px 16px 20px;
+  position: fixed; left: 0; top: 0; height: 100vh; z-index: 30;
+  overflow-y: auto; overflow-x: hidden;       /* rola sozinha: nunca corta item */
+  display: flex; flex-direction: column; gap: 3px;
+}
+.dg-main { margin-left: 256px; }               /* conteúdo livre da sidebar fixa (consistente em toda aba) */
+.dg-nav {
+  display: flex; align-items: center; gap: 13px;
+  padding: 11px 14px; border-radius: 10px;
+  color: var(--dg-grey); font-weight: 500; font-size: 15px; cursor: pointer;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease; user-select: none;
+}
+.dg-nav:hover { background: rgba(255,255,255,0.05); color: #eef1f7; }
+.dg-nav.active {
+  background: var(--dg-red-soft); color: #fff;
+  box-shadow: inset 3px 0 0 var(--dg-red);
+}
+.dg-nav .ico { width: 18px; text-align: center; font-size: 16px; opacity: .92; }
+
+/* ---- Superfícies (com elevação + sombra p/ separar do fundo) ---- */
+.dg-panel {
+  background: var(--dg-surface);
+  border: 1px solid var(--dg-line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--dg-shadow);
+}
+.dg-box {
+  background: var(--dg-raised);
+  border: 1px solid var(--dg-line-soft);
+  border-radius: var(--r-md);
+}
+/* card de lista clicável — leve realce no hover (sensação de app pro) */
+.dg-card {
+  background: var(--dg-raised);
+  border: 1px solid var(--dg-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--dg-shadow);
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.dg-card.dg-hover:hover {
+  border-color: var(--dg-line-strong);
+  box-shadow: var(--dg-shadow-hover);
+  transform: translateY(-1px);
+}
+/* chip / tag */
+.dg-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--dg-raised-2); border: 1px solid var(--dg-line-soft);
+  color: var(--dg-grey); font-size: 11px; padding: 3px 9px; border-radius: 999px;
+}
+.dg-divider { height: 1px; background: var(--dg-line-soft); border: 0; margin: 14px 0; }
+
+/* prévia do card: fixa quando lado a lado; o editor rola sozinho ao lado (card não sai da tela). */
+.dg-canvas { flex-shrink: 0; align-self: flex-start; }
+@media (min-width: 1024px) {
+  .dg-canvas { position: sticky; top: 24px; z-index: 2; }
+  .dg-edit-scroll { position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow-y: auto; overscroll-behavior: contain; }
+}
+
+/* ---- Botões ---- */
+.dg-btn {
+  background: rgba(255,255,255,0.05); color: #eef1f7;
+  border: 1px solid var(--dg-line);
+  border-radius: var(--r-sm); padding: 10px 16px; cursor: pointer; font-size: 14px;
+  font-weight: 500; transition: background .14s ease, border-color .14s ease;
+}
+.dg-btn:hover { background: rgba(255,255,255,0.09); border-color: var(--dg-line-strong); }
+.dg-btn:disabled { opacity: .45; cursor: default; }
+.dg-btn-primary {
+  background: var(--dg-red); color: #fff; border: 0; font-weight: 600;
+  box-shadow: 0 6px 16px -8px rgba(239,71,111,0.7);
+  transition: background .14s ease, box-shadow .14s ease, transform .1s ease;
+}
+.dg-btn-primary:hover { background: #f25c81; box-shadow: 0 8px 20px -8px rgba(239,71,111,0.85); }
+.dg-btn-primary:active { transform: translateY(1px); }
+.dg-btn-primary:disabled { opacity: .5; box-shadow: none; }
+
+/* ---- Inputs ---- */
+.dg-input, .dg-input:focus {
+  background: var(--dg-sunken); color: var(--dg-white);
+  border: 1px solid var(--dg-line);
+  border-radius: var(--r-sm); padding: 10px 12px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.dg-input:focus { border-color: rgba(239,71,111,0.55); box-shadow: 0 0 0 3px rgba(239,71,111,0.12); }
+.dg-input::placeholder { color: #5b6480; }
+
+/* grão sutil reutilizável (textura, foge do "Canva limpo") */
+.dg-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}

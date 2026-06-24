@@ -1,0 +1,157 @@
+// ETAPA 1 — escreve o ROTEIRO corrido (prosa, voz do Cândido). Modelo forte (Opus). Saída: texto.
+import Anthropic from "@anthropic-ai/sdk";
+import { ROTEIRO_SYSTEM } from "@/lib/n2squad";
+import { emotionBlock, hookBlock } from "@/lib/frameworks";
+import { registroBlock } from "@/lib/vitals";
+import { textOf, extractJson, pickRandom } from "@/lib/llm";
+import { detectTells } from "@/lib/tells";
+
+const CHEAP_MODEL = "claude-haiku-4-5";
+const CLEAN_MODEL = "claude-sonnet-4-6"; // passe cirúrgico de limpeza dos tells
+
+export const runtime = "nodejs";
+export const maxDuration = 120;
+
+const WRITE_MODEL = process.env.ANTHROPIC_WRITE_MODEL || "claude-opus-4-8";
+
+export async function POST(req: Request) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return Response.json({ error: "ANTHROPIC_API_KEY não configurada." }, { status: 500 });
+
+  const body = (await req.json().catch(() => ({}))) as { content?: string; hook?: string; emotions?: string[]; correlation?: string; inlineSource?: string; registro?: string; chosenHook?: string };
+  const content = (body.content || "").trim();
+  if (!content) return Response.json({ error: "Manda o conteúdo." }, { status: 400 });
+
+  const anthropic = new Anthropic({ apiKey: key });
+
+  const emoBlock = emotionBlock(body.emotions || []);
+  const hkBlock = hookBlock(body.hook);
+  const regBlock = registroBlock(body.registro);
+  const chosen = (body.chosenHook || "").trim().slice(0, 600);
+  const chosenBlock = chosen
+    ? `\n\nABERTURA JÁ ESCOLHIDA E APROVADA POR VOCÊ — o roteiro DEVE começar EXATAMENTE com esta abertura (pode ajustar levemente a pontuação/quebra pra fluir, mas mantenha as palavras e a força dela; NÃO troque por outra abertura, NÃO suavize). Construa o arco inteiro pra ENTREGAR e ESPELHAR essa abertura no fecho:\n"""${chosen}"""`
+    : "";
+  const correlation = (body.correlation || "").trim().slice(0, 600);
+  const corrBlock = correlation
+    ? `\n\nPONTE DE CORRELAÇÃO (sua escolha). Use ASSIM: ache o PRINCÍPIO REAL que a ponte e o assunto compartilham; a conexão tem que ser HONESTA, não forçada. Abre com a história/detalhe concreto, DESENVOLVE (quem é, o que aconteceu) e amarra no princípio comum ANTES de qualquer lição. Nunca largue a história e pule pro técnico.\nA ponte:\n${correlation}`
+    : "";
+
+  // coerência científica por AFIRMAÇÃO (RAG nos livros): extrai as claims do conteúdo e busca a PROVA de cada uma
+  let booksBlock = "";
+  try {
+    const { hasEmbeddings, embed } = await import("@/lib/embed");
+    if (hasEmbeddings()) {
+      // 1) extrai até 3 afirmações factuais que precisam estar corretas (Haiku — barato/rápido)
+      let claims: string[] = [];
+      try {
+        const cl = await anthropic.messages.create({
+          model: CHEAP_MODEL, max_tokens: 300,
+          messages: [{ role: "user", content: `Extraia até 3 AFIRMAÇÕES factuais/fisiológicas que este conteúdo faz e que precisam estar cientificamente CORRETAS (cada uma curta, em português, sem opinião). Responda APENAS JSON {"claims":["...","..."]}.\n\nCONTEÚDO:\n${content.slice(0, 2000)}` }],
+        });
+        const j = JSON.parse(extractJson(textOf(cl))) as { claims?: string[] };
+        claims = (j.claims || []).map((c) => (c || "").trim()).filter(Boolean).slice(0, 3);
+      } catch { /* sem claims → cai no fallback */ }
+
+      const queries = claims.length ? claims : [content.slice(0, 2000)];
+      const vecs = await embed(queries, "query");
+      const { searchBooks } = await import("@/lib/store");
+      const arrs = await Promise.all(vecs.map((v) => searchBooks(v, claims.length ? 3 : 8)));
+      const seen = new Set<string>();
+      const hits: { content: string }[] = [];
+      for (const arr of arrs) for (const h of arr) { const kk = h.content.slice(0, 60); if (!seen.has(kk)) { seen.add(kk); hits.push(h); } }
+      if (hits.length) {
+        booksBlock = `\n\nVERIFICAÇÃO DE COERÊNCIA — USO INTERNO (livros de fisiologia/nutrição${claims.length ? ", buscado pelas AFIRMAÇÕES do conteúdo" : ""}). Use SÓ pra não falar besteira. NÃO cite, NÃO copie termo acadêmico, NÃO deixe denso — invisível pra leitora:\n${hits.slice(0, 6).map((h) => `• ${h.content.slice(0, 500)}`).join("\n")}`;
+      }
+    }
+  } catch (e) { console.error("RAG roteiro", e instanceof Error ? e.message : String(e)); }
+
+  const inline = (body.inlineSource || "").trim().slice(0, 14000);
+  const inlineBlock = inline ? `\n\nFONTE PRINCIPAL (embase os números NISTO, na voz do Cândido, sem copiar frases):\n${inline}` : "";
+
+  // exemplos-ouro da voz (alvo de imitação de cadência) + estruturas-ouro (arco)
+  const { getGold, getGoldStructures, getAudience, getEdge, recentFreshLabels, addFreshness, getBrainModel, getLearnings, getRejects, sourcesBackground } = await import("@/lib/store");
+  const [aud, edg, recent] = await Promise.all([getAudience(), getEdge(), recentFreshLabels(30)]);
+  const reguaBlock = `\n\nRÉGUA ATUAL DA MARCA (use como norte):\nPÚBLICO: ${aud}\nARESTA / CARA DA MARCA: ${edg}`;
+
+  // ESPINHA DA MARCA + APRENDIZADO (ancoram o QUE você acredita/o que funciona — NÃO mudam COMO escreve).
+  // Sempre ligado: é parte da qualidade-base da escrita.
+  let brandBlock = "", learnBlock = "", historiaBlock = "";
+  try {
+    const [model, learn] = await Promise.all([getBrainModel(), getLearnings()]);
+    brandBlock = `\n\nESPINHA DA MARCA (ancore o conteúdo NISTO — é a verdade da marca (Team Netto · N² Squad); isto NÃO muda COMO você escreve, só no QUE você acredita e contra o que aponta):\nGRANDE TESE: ${model.grandeTese}\nINIMIGO (o conteúdo combate isto): ${model.inimigo}`;
+    if (learn?.summary) learnBlock = `\n\nAPRENDIZADO DOS DADOS REAIS DO CÂNDIDO (${learn.n} posts medidos — o que de fato performa pra ESTE público; use pra acertar mais, sem mudar a voz):\n${learn.summary}`;
+    if (model.historia?.trim()) historiaBlock = `\n\nA HISTÓRIA REAL DO CÂNDIDO (a vida dele, em primeira pessoa). Use QUANDO o conteúdo pedir HISTÓRIA / for sobre MARCA PESSOAL / a abertura partir da vivência dele — pra ancorar em momentos e cicatrizes REAIS, NUNCA inventar biografia nem colar uma frase pronta. NÃO force isto num post puramente técnico. Os pontos sensíveis se tocam com VERDADE e cuidado no peso, nunca como espetáculo nem como troféu:\n${model.historia.trim()}`;
+  } catch (e) { console.error("brand/learn roteiro", e instanceof Error ? e.message : String(e)); }
+  // CONHECIMENTO DE FUNDO da biblioteca de Fontes (PDFs/artigos/URLs) — embasa sem citar (invisível).
+  let sourcesBlock = "";
+  try {
+    const bg = await sourcesBackground(6000);
+    if (bg) sourcesBlock = `\n\nCONHECIMENTO DE FUNDO (da sua biblioteca de Fontes — use SÓ pra embasar e não falar besteira; NÃO cite, NÃO copie frases, NÃO deixe denso, mantenha invisível pra leitora):\n${bg}`;
+  } catch (e) { console.error("sources roteiro", e instanceof Error ? e.message : String(e)); }
+  const freshBlock = recent.length
+    ? `\n\nFRESCOR — EVITE repetir estas figuras/analogias/temas usados recentemente (varie, traga algo novo, não caia no mesmo): ${recent.slice(0, 12).join("; ")}`
+    : "";
+  // VOZ-OURO RELEVANTE: prioriza os exemplos do MESMO registro (não mais sorteio cego), completa com outros
+  const reg = body.registro;
+  const gold = await getGold();
+  const goldMatch = reg ? gold.filter((g) => g.registro === reg) : [];
+  const goldOther = gold.filter((g) => !goldMatch.includes(g));
+  const pickedGold = [...pickRandom(goldMatch, 3), ...pickRandom(goldOther, 3)].slice(0, 3);
+  const goldBlock = pickedGold.length
+    ? `\n\nA VOZ DO CÂNDIDO — EXEMPLOS REAIS DE COMO ELE ESCREVE (imite a CADÊNCIA, o ritmo, as quebras, o jeito de fechar; NÃO copie tema/frases, é o TOM)${goldMatch.length ? " — priorizei exemplos do MESMO tom" : ""}:\n${pickedGold.map((g, i) => `### exemplo ${i + 1}\n${g.text}`).join("\n\n")}`
+    : "";
+  // ANTI-OURO — roteiros que o Cândido REJEITOU: o Escritor aprende o que NÃO fazer (não muda COMO escreve, ancora contra)
+  const voiceRejects = await getRejects("voice");
+  const rejectBlock = voiceRejects.length
+    ? `\n\nROTEIROS/ABERTURAS QUE O CÂNDIDO REJEITOU (NÃO escreva assim — ele NÃO curtiu esse tom, ângulo ou jeito; fuja desse padrão):\n${voiceRejects.slice(0, 8).map((r) => `✗ ${r.text}`).join("\n")}`
+    : "";
+  // ESTRUTURA-OURO RELEVANTE: prefere a do mesmo registro
+  const gstructs = await getGoldStructures();
+  const structMatch = reg ? gstructs.filter((s) => s.registro === reg) : [];
+  const pickedStructs = structMatch.length ? pickRandom(structMatch, 1) : pickRandom(gstructs, 1);
+  const structBlock = pickedStructs.length
+    ? `\n\nESTRUTURA QUE FUNCIONOU (validada por métrica — use como MOLDE do ARCO, adapte ao tema, não copie):\n${pickedStructs.map((s) => s.outline).join("\n")}`
+    : "";
+
+  const userMsg = `${reguaBlock}${brandBlock}${historiaBlock}${learnBlock}${regBlock}${freshBlock}${hkBlock}${emoBlock}${chosenBlock}${corrBlock}${structBlock}${booksBlock}${sourcesBlock}${inlineBlock}${goldBlock}${rejectBlock}\n\nCONTEÚDO BRUTO PRA VIRAR ROTEIRO:\n${content}\n\nEscreva o roteiro corrido, na voz do Cândido. Só o texto.`;
+
+  try {
+    // ESCREVE o rascunho (pensa o arco antes; o texto de pensamento não entra no roteiro).
+    const gen = await anthropic.messages.create({
+      model: WRITE_MODEL,
+      max_tokens: 6000,
+      thinking: { type: "adaptive" as const },
+      system: [{ type: "text", text: ROTEIRO_SYSTEM, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: userMsg }],
+    });
+    let roteiro = textOf(gen).trim();
+    const res = { usage: gen.usage };
+
+    // AUTO-LIMPEZA (sempre): se o detector achou tells, conserta SÓ eles — cirúrgico.
+    // NÃO reescreve nem "melhora": só tira a cara de IA. Trava de segurança: só aceita se reduziu os
+    // tells E manteve o texto (não encurtou). Se piorar/encolher, fica o original. NÃO toca COMO escreve.
+    let tells = detectTells(roteiro);
+    let cleaned = false;
+    if (tells.length > 0) {
+      try {
+        const cl = await anthropic.messages.create({
+          model: CLEAN_MODEL, max_tokens: 2600,
+          messages: [{ role: "user", content: `Este é um roteiro do Cândido Netto (Team Netto · N² Squad, voz direta, firme, SEM palavrão). Um detector apontou estes possíveis "tells de IA" (vícios de robô): ${tells.join(" | ")}.\n\nConserte SOMENTE esses pontos. REGRAS DURAS:\n- Mude o MÍNIMO possível. Mantenha TODAS as outras palavras, a cadência, as quebras de linha, a pontuação.\n- NÃO reescreva, NÃO "melhore", NÃO suavize, NÃO acrescente ideia nova, NÃO resuma.\n- Se um "tell" na verdade for proposital e bom na voz dele (ex: uma repetição de força, "seu corpo responde a estímulo"), deixe quieto.\n- Tira muleta de IA: "não é X, é Y" virado clichê, travessão demais, exclamação fácil, frase motivacional açucarada ("você consegue"), jargão. Troca pela forma direta que o Cândido usaria.\n\nDevolva SÓ o texto do roteiro corrigido, nada mais.\n\nROTEIRO:\n${roteiro}` }],
+        });
+        const cand = textOf(cl).trim();
+        const candTells = detectTells(cand);
+        if (cand.length > roteiro.length * 0.6 && candTells.length < tells.length) {
+          roteiro = cand; tells = candTells; cleaned = true;
+        }
+      } catch (e) { console.error("auto-clean", e instanceof Error ? e.message : String(e)); }
+    }
+
+    // registra a ponte usada (frescor) — o pedaço-chave antes do "—"
+    if (correlation) { try { await addFreshness(correlation.split("—")[0]); } catch {} }
+    // FRESCOR DO ÂNGULO: registra a abertura pra não repetir o mesmo tipo de gancho (só quando não foi gancho travado)
+    if (!chosen) { try { const op = roteiro.split(/\n|(?<=[.?!])\s/)[0].replace(/\*\*/g, "").trim(); if (op.length > 14) await addFreshness(op.slice(0, 70)); } catch {} }
+    return Response.json({ roteiro, tells, cleaned, usage: res.usage });
+  } catch (e: unknown) {
+    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+  }
+}
