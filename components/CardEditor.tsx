@@ -186,8 +186,11 @@ function caps(l: Layout) {
 // campos de ESTILO que o "Kit da marca" salva e aplica (não mexe em conteúdo, layout, foto nem posições)
 const KIT_KEYS: (keyof Card)[] = ["titleFont", "bodyFont", "titleColor", "bodyColor", "highlightColor", "titleScale", "bodyScale", "titleShadow", "bodyShadow", "titleTracking", "titleLeading", "bodyTracking", "bodyLeading", "align", "bg", "tint", "nicks", "hideNick"];
 
-// fontes disponíveis (auto-hospedadas) — Anton (display), Montserrat, Inter
-const FONTS = ["Anton", "Montserrat", "Inter"];
+// fontes auto-hospedadas, separadas por força: FORTES (display/título) x SECUNDÁRIAS (corpo)
+const FONT_GROUPS: { label: string; fonts: string[] }[] = [
+  { label: "Fortes (título)", fonts: ["Anton", "Sequel100Black-75", "Montserrat ExtraBlack", "Airnt"] },
+  { label: "Secundárias (corpo)", fonts: ["Inter", "Montserrat", "Open Sans"] },
+];
 
 // texto cru de um card (pra guardar como exemplo-ouro de voz)
 function cardText(c: Card): string {
@@ -227,7 +230,10 @@ function RedField({ label, value, onChange, rows = 3, hint }: { label: string; v
   // digita no estado local (instantâneo) e comita pro carrossel ao parar (debounce) — não trava a digitação
   const [local, setLocal] = useState(value);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => { setLocal(value); }, [value]); // sincroniza quando o valor muda de fora (trocar card, undo, regerar)
+  useEffect(() => {
+    const sync = setTimeout(() => setLocal(value), 0);
+    return () => clearTimeout(sync);
+  }, [value]); // sincroniza quando o valor muda de fora (trocar card, undo, regerar)
   const onType = (v: string) => {
     setLocal(v);
     if (timer.current) clearTimeout(timer.current);
@@ -277,6 +283,15 @@ function RedField({ label, value, onChange, rows = 3, hint }: { label: string; v
   );
 }
 
+function ApplyAll({ label, keys, onApplyAll }: { label: string; keys: (keyof Card)[]; onApplyAll?: (keys: (keyof Card)[]) => void }) {
+  return onApplyAll ? (
+    <button onClick={() => onApplyAll(keys)} title="Aplica este ajuste em TODOS os cards do carrossel"
+      style={{ marginTop: 8, fontSize: 11, background: "#16201f", color: "#7fd0c0", border: "1px solid #2c4c48", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>
+      🔁 {label}
+    </button>
+  ) : null;
+}
+
 export default function CardEditor({ card, onChange, carousel, index, onReplace, onApplyAll, onApplyKit }: { card: Card; onChange: (patch: Partial<Card>) => void; carousel: Carousel; index: number; onReplace: (card: Card) => void; onApplyAll?: (keys: (keyof Card)[]) => void; onApplyKit?: (style: Partial<Card>, all: boolean) => void }) {
   const editorRef = useRef<HTMLDivElement>(null); // coluna do editor (rola sozinha; o card fica fixo)
   const [regenLoad, setRegenLoad] = useState(false);
@@ -300,12 +315,22 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
   }, []);
   // cores favoritas (persistem no navegador)
   const [favColors, setFavColors] = useState<string[]>([]);
-  useEffect(() => { try { setFavColors(JSON.parse(localStorage.getItem("n2_fav_colors") || "[]")); } catch {} }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try { setFavColors(JSON.parse(localStorage.getItem("n2_fav_colors") || "[]")); } catch {}
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const addFav = (hex: string) => setFavColors((prev) => { const next = [hex.toLowerCase(), ...prev.filter((x) => x !== hex.toLowerCase())].slice(0, 14); try { localStorage.setItem("n2_fav_colors", JSON.stringify(next)); } catch {} return next; });
 
   // KIT DA MARCA (presets de estilo, salvos no navegador)
   const [kits, setKits] = useState<{ name: string; style: Partial<Card> }[]>([]);
-  useEffect(() => { try { setKits(JSON.parse(localStorage.getItem("n2_brand_kits") || "[]")); } catch {} }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try { setKits(JSON.parse(localStorage.getItem("n2_brand_kits") || "[]")); } catch {}
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   function persistKits(list: { name: string; style: Partial<Card> }[]) { setKits(list); try { localStorage.setItem("n2_brand_kits", JSON.stringify(list)); } catch {} }
   function saveKit() {
     const name = prompt("Nome do kit (ex: Padrão N², Vinho premium):", "");
@@ -351,7 +376,10 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
   useEffect(() => {
     const s = card.imageSentiment;
     if (!s || s === imgsFor) return;
-    if (s.startsWith("cat:")) loadCategory(s.slice(4)); else loadImages(s);
+    const timer = window.setTimeout(() => {
+      if (s.startsWith("cat:")) loadCategory(s.slice(4)); else loadImages(s);
+    }, 0);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.imageSentiment]);
 
@@ -382,7 +410,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
       updateOverlay(i, { src: url, color: true });
     } catch (e) {
       console.error("removeBg", e);
-      alert("Não consegui remover o fundo dessa imagem. Tenta de novo ou outra imagem.");
+      alert("Não consegui remover o fundo dessa imagem — tenta de novo ou outra imagem");
     }
     setBgBusy(null);
   }
@@ -411,7 +439,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
       const r = await fetch("/api/upload", { method: "POST", body: fd });
       const d = await r.json();
       if (d.src) onChange({ image: d.src, imageSentiment: "", bw: false }); // foto sua entra COLORIDA; toggle P&B abaixo
-    } catch { alert("Não consegui enviar essa imagem. Tenta outra."); }
+    } catch { alert("Não consegui enviar essa imagem — tenta outra"); }
     setBgUpBusy(false);
   }
   // 2ª foto (lado "depois" do l3-antes-depois)
@@ -425,7 +453,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
       const r = await fetch("/api/upload", { method: "POST", body: fd });
       const d = await r.json();
       if (d.src) onChange({ image2: d.src });
-    } catch { alert("Não consegui enviar essa imagem. Tenta outra."); }
+    } catch { alert("Não consegui enviar essa imagem — tenta outra"); }
     setBgUpBusy2(false);
   }
 
@@ -490,13 +518,6 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
     { id: "movetexto", label: "Mover" }, { id: "fundo", label: "Fundo" }, { id: "logo", label: "Logos" },
     { id: "nick", label: "Nick" }, { id: "overlays", label: "Overlay" }, { id: "regerar", label: "IA" }, { id: "kit", label: "Kit" },
   ];
-  const ApplyAll = ({ label, keys }: { label: string; keys: (keyof Card)[] }) =>
-    onApplyAll ? (
-      <button onClick={() => onApplyAll(keys)} title="Aplica este ajuste em TODOS os cards do carrossel"
-        style={{ marginTop: 8, fontSize: 11, background: "#16201f", color: "#7fd0c0", border: "1px solid #2c4c48", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>
-        🔁 {label}
-      </button>
-    ) : null;
   const alignBtns = (
     <div style={{ display: "flex", gap: 8 }}>
       {([["left", "⬅ esquerda"], ["center", "↔ centro"]] as const).map(([v, lbl]) => {
@@ -507,7 +528,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
   );
 
   return (
-    <div ref={editorRef} className="dg-panel dg-edit-scroll" style={{ padding: 16, minWidth: 380, flex: 1 }}>
+    <div ref={editorRef} className="studio-section card-editor-premium dg-edit-scroll" style={{ padding: 16, minWidth: 380, flex: 1 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap", paddingBottom: 12, borderBottom: "1px solid var(--dg-line-soft)" }}>
         <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: "#fff", letterSpacing: 1 }}>EDITAR</span>
         <span className="dg-chip" style={{ background: "var(--dg-red-soft)", borderColor: "rgba(239,71,111,0.4)", color: "#ff9fb4", fontWeight: 700 }}>{card.index}</span>
@@ -546,13 +567,13 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
       {/* TÍTULO — texto + tamanho + cor + alinhamento, tudo junto */}
       <Section title="Título" {...sec("titulo")} right={<span style={{ fontSize: 10.5, color: "#7c869c" }}>seleciona → ● rosa = cor</span>}>
         {cap.headline
-          ? <RedField label="Texto do título" value={card.headline || ""} onChange={(v) => onChange({ headline: v })} rows={2} hint="Enter quebra a linha. Selecione um trecho + ● rosa pra colorir." />
-          : <div style={{ fontSize: 11.5, color: "#7c869c", marginBottom: 10 }}>Este layout não usa título — escreva no campo <b style={{ color: "#cfcfcf" }}>Texto / corpo</b> (seção abaixo). Os controles abaixo ajustam o estilo do texto.</div>}
+          ? <RedField label="Texto do título" value={card.headline || ""} onChange={(v) => onChange({ headline: v })} rows={2} hint="Enter quebra a linha — selecione um trecho + ● rosa pra colorir" />
+          : <div style={{ fontSize: 11.5, color: "#7c869c", marginBottom: 10 }}>Este layout não usa título — escreva no campo <b style={{ color: "#cfcfcf" }}>Texto / corpo</b> (seção abaixo). Os controles abaixo ajustam o estilo do texto</div>}
         <Slider label="Tamanho" val={card.titleScale ?? 1} min={0.4} max={1.2} step={0.01} on={(v) => onChange({ titleScale: v })} pctEdit />
         <div style={{ marginTop: 10 }}>
           <label style={{ fontSize: 11, color: "#b0b6c4", display: "block", marginBottom: 5 }}>Fonte do título</label>
           <select value={card.titleFont || "Anton"} onChange={(e) => onChange({ titleFont: e.target.value })} style={selStyle}>
-            {FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
+            {FONT_GROUPS.map((g) => <optgroup key={g.label} label={g.label}>{g.fonts.map((f) => <option key={f} value={f}>{f}</option>)}</optgroup>)}
           </select>
         </div>
         <Slider label="Sombra do título" val={card.titleShadow ?? 0.6} min={0} max={1.5} step={0.01} on={(v) => onChange({ titleShadow: v })} pctEdit />
@@ -564,14 +585,14 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
           <label style={{ fontSize: 11, color: "#b0b6c4", display: "block", marginBottom: 5 }}>Alinhamento (título e corpo)</label>
           {alignBtns}
         </div>
-        <ApplyAll label="aplicar estilo (fontes, cores, sombras, tamanhos, espaçamento, alinhamento) a todos" keys={["align", "titleScale", "bodyScale", "titleFont", "bodyFont", "titleShadow", "bodyShadow", "titleColor", "bodyColor", "highlightColor", "titleTracking", "titleLeading", "bodyTracking", "bodyLeading"]} />
+        <ApplyAll onApplyAll={onApplyAll} label="aplicar estilo (fontes, cores, sombras, tamanhos, espaçamento, alinhamento) a todos" keys={["align", "titleScale", "bodyScale", "titleFont", "bodyFont", "titleShadow", "bodyShadow", "titleColor", "bodyColor", "highlightColor", "titleTracking", "titleLeading", "bodyTracking", "bodyLeading"]} />
       </Section>
 
       {/* MOVER TEXTO (posição) */}
       <Section title="Mover texto (posição)" {...sec("movetexto")}>
         {dual ? (
           <>
-            <div style={{ fontSize: 11, color: "#7c869c", marginBottom: 6 }}>Título e corpo movem <b style={{ color: "#cfcfcf" }}>separados</b> — arraste as alças <b style={{ color: "#cfcfcf" }}>TÍTULO</b> e <b style={{ color: "#cfcfcf" }}>CORPO</b> na prévia, ou use os botões.</div>
+            <div style={{ fontSize: 11, color: "#7c869c", marginBottom: 6 }}>Título e corpo movem <b style={{ color: "#cfcfcf" }}>separados</b> — arraste as alças <b style={{ color: "#cfcfcf" }}>TÍTULO</b> e <b style={{ color: "#cfcfcf" }}>CORPO</b> na prévia, ou use os botões</div>
             <label style={{ fontSize: 11.5, color: "#b0b6c4", textTransform: "uppercase", letterSpacing: 1, display: "block", marginTop: 4 }}>Título</label>
             <AlignButtons onSet={alignOffset((ax, v) => onChange(ax === "x" ? { titleX: v } : { titleY: v }))} />
             <Slider label="◄ horizontal ►" val={card.titleX ?? 0} min={-0.1} max={0.1} step={0.005} on={(v) => onChange({ titleX: v })} fmt={pct} />
@@ -581,16 +602,16 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
             <Slider label="◄ horizontal ►" val={card.bodyX ?? 0} min={-0.1} max={0.1} step={0.005} on={(v) => onChange({ bodyX: v })} fmt={pct} />
             <Slider label="▲ vertical ▼" val={card.bodyY ?? 0} min={-0.45} max={0.45} step={0.005} on={(v) => onChange({ bodyY: v })} fmt={pct} />
             <button onClick={() => onChange({ titleX: undefined, titleY: undefined, bodyX: undefined, bodyY: undefined })} style={{ marginTop: 8, fontSize: 11, background: "transparent", color: "#9aa0b0", border: "1px solid #2e2e36", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>resetar posições</button>
-            <ApplyAll label="aplicar posição do título e corpo a todos" keys={["titleX", "titleY", "bodyX", "bodyY"]} />
+            <ApplyAll onApplyAll={onApplyAll} label="aplicar posição do título e corpo a todos" keys={["titleX", "titleY", "bodyX", "bodyY"]} />
           </>
         ) : (
           <>
-            <div style={{ fontSize: 11, color: "#7c869c", marginBottom: 6 }}>Desloca o texto — arraste a alça <b style={{ color: "#cfcfcf" }}>TEXTO</b> na prévia, ou use os botões.</div>
+            <div style={{ fontSize: 11, color: "#7c869c", marginBottom: 6 }}>Desloca o texto — arraste a alça <b style={{ color: "#cfcfcf" }}>TEXTO</b> na prévia, ou use os botões</div>
             <AlignButtons onSet={alignOffset((ax, v) => onChange(ax === "x" ? { textX: v } : { textY: v }))} />
             <Slider label="◄ horizontal ►" val={card.textX ?? 0} min={-0.1} max={0.1} step={0.005} on={(v) => onChange({ textX: v })} fmt={pct} />
             <Slider label="▲ vertical ▼" val={card.textY ?? 0} min={-0.45} max={0.45} step={0.005} on={(v) => onChange({ textY: v })} fmt={pct} />
             <button onClick={() => onChange({ textX: undefined, textY: undefined })} style={{ marginTop: 8, fontSize: 11, background: "transparent", color: "#9aa0b0", border: "1px solid #2e2e36", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>centralizar (resetar)</button>
-            <ApplyAll label="aplicar posição do texto a todos os cards" keys={["textX", "textY"]} />
+            <ApplyAll onApplyAll={onApplyAll} label="aplicar posição do texto a todos os cards" keys={["textX", "textY"]} />
           </>
         )}
       </Section>
@@ -598,7 +619,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
       {/* TEXTO & ELEMENTOS */}
       <Section title="Texto, kicker, bullets & assinatura" {...sec("texto")}>
         {cap.kicker && <RedField label="Kicker (rótulo pequeno)" value={card.kicker || ""} onChange={(v) => onChange({ kicker: v })} rows={1} />}
-        {cap.body && <RedField label="Texto / corpo" value={card.body || ""} onChange={(v) => onChange({ body: v })} rows={6} hint="1 Enter = quebra · 2 Enters = novo parágrafo." />}
+        {cap.body && <RedField label="Texto / corpo" value={card.body || ""} onChange={(v) => onChange({ body: v })} rows={6} hint="1 Enter = quebra · 2 Enters = novo parágrafo" />}
         {cap.bullets && <RedField label="Bullets / passos (um por linha)" value={(card.bullets || []).join("\n")} onChange={(v) => onChange({ bullets: v.split("\n").filter((x) => x.trim()) })} rows={5} />}
         {(cap.body || cap.bullets) && (
           <>
@@ -606,7 +627,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
             <div style={{ marginTop: 10 }}>
               <label style={{ fontSize: 11, color: "#b0b6c4", display: "block", marginBottom: 5 }}>Fonte do corpo</label>
               <select value={card.bodyFont || "Inter"} onChange={(e) => onChange({ bodyFont: e.target.value })} style={selStyle}>
-                {FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
+                {FONT_GROUPS.map((g) => <optgroup key={g.label} label={g.label}>{g.fonts.map((f) => <option key={f} value={f}>{f}</option>)}</optgroup>)}
               </select>
             </div>
             <Slider label="Sombra do texto" val={card.bodyShadow ?? 0.5} min={0} max={1.5} step={0.01} on={(v) => onChange({ bodyShadow: v })} pctEdit />
@@ -617,7 +638,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
         )}
         {cap.signoff && (<><div style={{ height: 12 }} /><RedField label="Assinatura / CTA (ex: Tamo junto.)" value={card.signoff || ""} onChange={(v) => onChange({ signoff: v })} rows={1} /></>)}
         {cap.source && <RedField label="Referência / fonte (ex: Müller et al., 2016)" value={card.source || ""} onChange={(v) => onChange({ source: v })} rows={1} />}
-        {!cap.kicker && !cap.body && !cap.bullets && !cap.signoff && !cap.source && <div style={{ fontSize: 12, color: "#7c869c" }}>Este layout usa só o <b style={{ color: "#cfcfcf" }}>Título</b> (seção acima). Troque o layout pra usar corpo, kicker, bullets ou assinatura.</div>}
+        {!cap.kicker && !cap.body && !cap.bullets && !cap.signoff && !cap.source && <div style={{ fontSize: 12, color: "#7c869c" }}>Este layout usa só o <b style={{ color: "#cfcfcf" }}>Título</b> (seção acima). Troque o layout pra usar corpo, kicker, bullets ou assinatura</div>}
       </Section>
 
       {/* FUNDO — imagem + posição + zoom + sombra, tudo junto */}
@@ -628,7 +649,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
               <button onClick={() => bgFileRef.current?.click()} disabled={bgUpBusy}
                 style={{ fontSize: 12.5, background: "#21212a", color: "#f5f5f5", border: "1px solid #3b3b44", borderRadius: 7, padding: "7px 13px", cursor: "pointer", opacity: bgUpBusy ? 0.6 : 1 }}>
-                {bgUpBusy ? "enviando…" : "⬆ enviar foto do meu arquivo"}
+                {bgUpBusy ? "enviando" : "⬆ enviar foto do meu arquivo"}
               </button>
               <input ref={bgFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadBackground(f); e.currentTarget.value = ""; }} />
               <label style={{ fontSize: 12.5, color: "#cfcfcf", display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}>
@@ -684,12 +705,12 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
         {(card.layout === "l3-antes-depois" || card.layout === "l8-split" || card.layout === "l8-ruptura") && (
           <div style={{ marginTop: 4, marginBottom: 14, paddingTop: 12, borderTop: "1px solid #2e2e36" }}>
             <div style={{ fontSize: 11.5, color: "#b0b6c4", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>2ª foto — {card.layout === "l3-antes-depois" ? "lado “DEPOIS”" : "metade de baixo"}</div>
-            <div style={{ fontSize: 10.5, color: "#7c869c", marginBottom: 8 }}>{card.layout === "l3-antes-depois" ? "A 1ª foto (acima) é o “ANTES”. Esta é o “DEPOIS”." : "A 1ª foto fica em cima; esta fica embaixo."}</div>
+            <div style={{ fontSize: 10.5, color: "#7c869c", marginBottom: 8 }}>{card.layout === "l3-antes-depois" ? "A 1ª foto (acima) é o “ANTES” — esta é o “DEPOIS”" : "A 1ª foto fica em cima; esta fica embaixo"}</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               {card.image2 && <img src={card.image2} alt="" style={{ width: 54, height: 54, objectFit: "cover", borderRadius: 8, border: "1px solid #2e2e36" }} />}
               <button onClick={() => bgFile2Ref.current?.click()} disabled={bgUpBusy2}
                 style={{ fontSize: 12.5, background: "#21212a", color: "#f5f5f5", border: "1px solid #3b3b44", borderRadius: 7, padding: "7px 13px", cursor: "pointer", opacity: bgUpBusy2 ? 0.6 : 1 }}>
-                {bgUpBusy2 ? "enviando…" : card.image2 ? "trocar foto" : "⬆ enviar foto do 'depois'"}
+                {bgUpBusy2 ? "enviando" : card.image2 ? "trocar foto" : "⬆ enviar foto do 'depois'"}
               </button>
               {card.image2 && <button onClick={() => onChange({ image2: undefined })} style={{ fontSize: 11, background: "transparent", color: "#e0738c", border: "1px solid #3a1c28", borderRadius: 6, padding: "6px 10px", cursor: "pointer" }}>remover</button>}
               <input ref={bgFile2Ref} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadSecond(f); e.currentTarget.value = ""; }} />
@@ -697,7 +718,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
             <div style={{ marginTop: 8 }}>
               <label style={{ fontSize: 10.5, color: "#7c869c", display: "block", marginBottom: 4 }}>📚 ou pegar da biblioteca:</label>
               <select value="" onChange={(e) => loadLib2(e.target.value)} style={{ ...selStyle, fontSize: 12 }}>
-                <option value="">escolher categoria/sentimento…</option>
+                <option value="">escolher categoria/sentimento</option>
                 {sentiments.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
               {lib2.length > 0 && (
@@ -730,7 +751,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
           <button onClick={() => onChange({ tint: undefined })} style={{ fontSize: 12, background: "transparent", color: "#9aa0b0", border: "1px solid #3b3b44", borderRadius: 6, padding: "5px 14px", cursor: "pointer" }}>nenhuma</button>
         </div>
         {tint && <Slider label="Opacidade" val={tint.opacity} min={0.05} max={0.9} step={0.05} on={(v) => onChange({ tint: { ...tint, opacity: v } })} fmt={pct} />}
-        <div><ApplyAll label="aplicar fundo + sombra a todos os cards" keys={["bg", "tint"]} /></div>
+        <div><ApplyAll onApplyAll={onApplyAll} label="aplicar fundo + sombra a todos os cards" keys={["bg", "tint"]} /></div>
       </Section>
 
       {/* LOGOS — escolher da biblioteca (até 2) ou usar a padrão */}
@@ -779,7 +800,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
             </div>
           ))
         )}
-        <ApplyAll label="aplicar logos a todos os cards" keys={["logo", "logos"]} />
+        <ApplyAll onApplyAll={onApplyAll} label="aplicar logos a todos os cards" keys={["logo", "logos"]} />
       </Section>
 
       {/* NICK INSTAGRAM — handle no topo dos cards Layout 2/3 (até 2) */}
@@ -789,10 +810,10 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
         </label>
       }>
         {card.hideNick ? (
-          <div style={{ fontSize: 12, color: "#7c869c" }}>Nick <b style={{ color: "#e0738c" }}>desligado</b> neste card. Marque “mostrar” pra exibir.</div>
+          <div style={{ fontSize: 12, color: "#7c869c" }}>Nick <b style={{ color: "#e0738c" }}>desligado</b> neste card. Marque “mostrar” pra exibir</div>
         ) : (
           <>
-            <div style={{ fontSize: 11, color: "#7c869c", marginBottom: 8 }}>Aparece pequeno no topo dos cards dos <b style={{ color: "#cfcfcf" }}>Layouts 2 a 6</b>. Pode usar 1 ou 2 (ex: <b style={{ color: "#cfcfcf" }}>@teamnetto</b> e <b style={{ color: "#cfcfcf" }}>@n2squad</b>).</div>
+            <div style={{ fontSize: 11, color: "#7c869c", marginBottom: 8 }}>Aparece pequeno no topo dos cards dos <b style={{ color: "#cfcfcf" }}>Layouts 2 a 6</b>. Pode usar 1 ou 2 (ex: <b style={{ color: "#cfcfcf" }}>@teamnetto</b> e <b style={{ color: "#cfcfcf" }}>@n2squad</b>)</div>
             {[0, 1].map((i) => (
               <input key={i} value={card.nicks?.[i] || ""} placeholder={i === 0 ? "@nick principal (ex: @n2squad)" : "@2º nick (opcional)"}
                 onChange={(e) => { const arr = [card.nicks?.[0] || "", card.nicks?.[1] || ""]; arr[i] = e.target.value; onChange({ nicks: arr }); }}
@@ -813,7 +834,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
             </div>
           </>
         )}
-        <ApplyAll label="aplicar nick (mostrar/esconder + posição + texto) a todos" keys={["nicks", "hideNick", "nickPos"]} />
+        <ApplyAll onApplyAll={onApplyAll} label="aplicar nick (mostrar/esconder + posição + texto) a todos" keys={["nicks", "hideNick", "nickPos"]} />
       </Section>
 
       {/* OVERLAYS */}
@@ -834,10 +855,10 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
                     style={{ width: "100%", height: 54, objectFit: "contain", cursor: "pointer", borderRadius: 5, padding: 3, backgroundColor: "#8a93a8", backgroundImage: "linear-gradient(45deg,#6b7488 25%,transparent 25%),linear-gradient(-45deg,#6b7488 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#6b7488 75%),linear-gradient(-45deg,transparent 75%,#6b7488 75%)", backgroundSize: "10px 10px", backgroundPosition: "0 0,0 5px,5px -5px,-5px 0" }} />
                 ))}
               </div>
-            ) : <div style={{ fontSize: 11, color: "#7c869c" }}>Sem overlays na biblioteca. Sobe em <b style={{ color: "#cfcfcf" }}>Biblioteca → Overlays</b>.</div>}
+            ) : <div style={{ fontSize: 11, color: "#7c869c" }}>Sem overlays na biblioteca. Sobe em <b style={{ color: "#cfcfcf" }}>Biblioteca → Overlays</b></div>}
           </div>
         )}
-        {!overlays.length && <div style={{ fontSize: 12, color: "#7c869c" }}>Nenhuma no card. Use <b style={{ color: "#cfcfcf" }}>📚 biblioteca</b> pra pegar uma salva, ou <b style={{ color: "#cfcfcf" }}>+ imagem</b> pra subir na hora. Depois <b style={{ color: "#5fd38a" }}>✂️ fundo</b> recorta.</div>}
+        {!overlays.length && <div style={{ fontSize: 12, color: "#7c869c" }}>Nenhuma no card. Use <b style={{ color: "#cfcfcf" }}>📚 biblioteca</b> pra pegar uma salva, ou <b style={{ color: "#cfcfcf" }}>+ imagem</b> pra subir na hora. Depois <b style={{ color: "#5fd38a" }}>✂️ fundo</b> recorta</div>}
         {overlays.map((o, i) => (
           <div key={i} style={{ background: "#121216", border: "1px solid #2e2e36", borderRadius: 8, padding: 10, marginBottom: 8 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
@@ -847,7 +868,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
               </label>
               <button onClick={() => removeBg(i)} disabled={bgBusy === i} title="Remover o fundo (vira PNG transparente — roda no navegador, sem custo)"
                 style={{ fontSize: 11, background: "#16261a", color: "#5fd38a", border: "1px solid #2c5c3e", borderRadius: 6, padding: "3px 8px", cursor: "pointer", whiteSpace: "nowrap", opacity: bgBusy === i ? 0.6 : 1 }}>
-                {bgBusy === i ? "removendo…" : "✂️ fundo"}
+                {bgBusy === i ? "removendo" : "✂️ fundo"}
               </button>
               <button onClick={() => removeOverlay(i)} style={{ background: "transparent", color: "#e0738c", border: "1px solid #3a2a32", borderRadius: 6, padding: "2px 9px", cursor: "pointer" }}>×</button>
             </div>
@@ -857,26 +878,26 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
             <Slider label="Opacidade" val={o.opacity ?? 1} min={0.1} max={1} step={0.05} on={(v) => updateOverlay(i, { opacity: v })} fmt={pct} />
           </div>
         ))}
-        {overlays.length > 0 && <ApplyAll label="aplicar estas imagens a todos os cards" keys={["overlays"]} />}
+        {overlays.length > 0 && <ApplyAll onApplyAll={onApplyAll} label="aplicar estas imagens a todos os cards" keys={["overlays"]} />}
       </Section>
 
       {/* REGERAR IA */}
       <Section title="Regerar este card (IA)" {...sec("regerar")}>
         <div style={{ display: "flex", gap: 8 }}>
-          <input value={instr} onChange={(e) => setInstr(e.target.value)} placeholder="instrução opcional: mais direto, encurta, mais firmeza..."
+          <input value={instr} onChange={(e) => setInstr(e.target.value)} placeholder="instrução opcional: mais direto, encurta, mais firmeza"
             style={{ flex: 1, background: "#121216", color: "#f5f5f5", border: "1px solid #2e2e36", borderRadius: 8, padding: "9px 11px", fontSize: 13 }} />
           <button onClick={regen} disabled={regenLoad} className="dg-btn-primary" style={{ padding: "0 18px", whiteSpace: "nowrap" }}>
-            {regenLoad ? "Regerando..." : "🔄 Regerar"}
+            {regenLoad ? "Regerando" : "🔄 Regerar"}
           </button>
         </div>
       </Section>
 
       {/* KIT DA MARCA (por último) */}
       <Section title="Kit da marca (estilo)" {...sec("kit")}>
-        <div style={{ fontSize: 11, color: "var(--dg-faint)", marginBottom: 8 }}>Salva fonte, cores, sombras, espaçamento, alinhamento, fundo e nick como um kit — e aplica num clique. Pra ver/renomear/excluir todos, abra <b style={{ color: "#cfcfcf" }}>Kit</b> no menu lateral.</div>
+        <div style={{ fontSize: 11, color: "var(--dg-faint)", marginBottom: 8 }}>Salva fonte, cores, sombras, espaçamento, alinhamento, fundo e nick como um kit — e aplica num clique. Pra ver/renomear/excluir todos, abra <b style={{ color: "#cfcfcf" }}>Kit</b> no menu lateral</div>
         <button onClick={saveKit} style={{ fontSize: 12.5, fontWeight: 600, background: "var(--dg-red-soft)", color: "#ff9fb4", border: "1px solid rgba(239,71,111,0.4)", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>💾 salvar estilo atual como kit</button>
         {kits.length === 0 ? (
-          <div style={{ fontSize: 11.5, color: "var(--dg-faint)", marginTop: 8 }}>Nenhum kit salvo ainda. Deixa um card do jeito que quer e salva.</div>
+          <div style={{ fontSize: 11.5, color: "var(--dg-faint)", marginTop: 8 }}>Nenhum kit salvo ainda. Deixa um card do jeito que quer e salva</div>
         ) : (
           <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
             {kits.map((k) => (

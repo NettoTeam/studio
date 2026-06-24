@@ -22,8 +22,14 @@ const fieldLbl: CSSProperties = { fontSize: 10, color: "var(--dg-faint)", textTr
 
 export default function Board({ onOpen, onCreate }: { onOpen: (c: Carousel) => void; onCreate?: (post: Post) => void }) {
   const [posts, setPosts] = useState<Post[]>([]);
-  async function load() { const r = await fetch("/api/posts"); const d = await r.json(); setPosts(d.posts || []); }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/posts")
+      .then((r) => r.json())
+      .then((d) => { if (alive) setPosts(d.posts || []); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   // salva por trás SEM recarregar a lista (tela já reagiu) — fluidez
   function persist(updated: Post) {
@@ -78,45 +84,61 @@ export default function Board({ onOpen, onCreate }: { onOpen: (c: Carousel) => v
     if (d.post) { setPosts((prev) => [d.post, ...prev]); toast("💡 ideia adicionada ao Quadro"); }
   }
 
+  const totalPosts = posts.length;
+  const totalAgendados = posts.filter((p) => p.stage === "agendado" || p.scheduledAt).length;
+  const totalPublicados = posts.filter((p) => p.stage === "publicado").length;
+
   return (
-    <div>
-    <div className="dg-panel" style={{ padding: 12, marginBottom: 16, display: "flex", gap: 8 }}>
+    <div className="studio-page">
+      <section className="studio-hero">
+        <div className="studio-hero__copy">
+          <h2>Quadro vivo do conteúdo</h2>
+          <p>Ideias, roteiros, agendamentos e publicados em uma esteira visual para decidir o próximo movimento sem perder contexto</p>
+        </div>
+        <div className="studio-hero__side" aria-hidden="true">
+          <div className="studio-stat"><strong>{totalPosts}</strong><span>Total</span></div>
+          <div className="studio-stat"><strong>{totalAgendados}</strong><span>Agendados</span></div>
+          <div className="studio-stat"><strong>{totalPublicados}</strong><span>Publicados</span></div>
+          <div className="studio-stat"><strong>{STAGES.length}</strong><span>Etapas</span></div>
+        </div>
+      </section>
+
+    <div className="studio-section board-quick-add">
       <input value={ideaText} onChange={(e) => setIdeaText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addIdea()}
-        placeholder="Joga uma ideia rápida (só o tema)… depois é só clicar ✍️ escrever" className="dg-input" style={{ flex: 1 }} />
+        placeholder="Joga uma ideia rapida" className="studio-input" style={{ flex: 1 }} />
       <button className="dg-btn-primary" onClick={addIdea} style={{ padding: "0 18px" }}>+ Ideia</button>
     </div>
-    <div style={{ fontSize: 12, color: "#7c869c", marginBottom: 10 }}>Arrasta o card entre as colunas pra mudar a etapa. 🖱️</div>
-    <div style={{ display: "flex", gap: 14, overflowX: "auto", paddingBottom: 12 }}>
+    <div className="board-columns">
       {STAGES.map((st) => {
         const items = posts.filter((p) => (p.stage || "ideia") === st.key);
         const isOver = over === st.key;
         return (
-          <div key={st.key} style={{ minWidth: 250, flex: "1 0 250px" }}
+          <section key={st.key} className="board-column" style={{ ["--stage-color" as string]: st.color }}
             onDragOver={(e) => { e.preventDefault(); if (over !== st.key) setOver(st.key); }}
             onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver((o) => (o === st.key ? null : o)); }}
             onDrop={() => dropOn(st.key)}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `3px solid ${st.color}`, paddingTop: 8, marginBottom: 10 }}>
-              <span style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: 1, color: st.color }}>{st.name}</span>
-              <span style={{ color: "#7c869c", fontWeight: 700, fontSize: 18 }}>{String(items.length).padStart(2, "0")}</span>
+            <div className="board-column-head">
+              <span className="board-column-name">{st.name}</span>
+              <span className="board-count">{String(items.length).padStart(2, "0")}</span>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 80, borderRadius: 10, padding: isOver ? 6 : 0, background: isOver ? "#16203a" : "transparent", outline: isOver ? `2px dashed ${st.color}` : "none", transition: "background .12s" }}>
+            <div className={"board-dropzone" + (isOver ? " is-over" : "")}>
               {items.map((p) => (
                 <div key={p.id} draggable
                   onDragStart={(e) => { dragId.current = p.id; e.dataTransfer.effectAllowed = "move"; }}
                   onDragEnd={() => { dragId.current = null; setOver(null); }}
-                  className="dg-card" style={{ padding: 12, cursor: "grab" }}>
-                  <div onClick={() => toggleExpand(p)} title="ver gancho + contexto" style={{ fontSize: 13, color: "var(--dg-text)", marginBottom: 8, lineHeight: 1.4, cursor: "pointer", display: "flex", gap: 7, alignItems: "flex-start" }}>
-                    <span style={{ color: "#7c869c", fontSize: 11, marginTop: 1, flexShrink: 0 }}>⤢</span>
-                    <span>{(p.carousel.cards[0]?.headline || p.tema || "").replace(/\*\*/g, "").slice(0, 80)}…</span>
+                  className="dg-card board-card">
+                  <div onClick={() => toggleExpand(p)} title="ver gancho + contexto" className="board-card-title">
+                    <span className="board-expand">⤢</span>
+                    <span>{(p.carousel.cards[0]?.headline || p.tema || "").replace(/\*\*/g, "").slice(0, 80)}</span>
                   </div>
-                  <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <span style={{ fontSize: 10, background: "#2a2540", color: "#a89bff", padding: "2px 6px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{p.type || "carrossel"}</span>
-                    {p.savedHook && <span style={{ fontSize: 10, background: "#241f0e", color: "#e8c860", border: "1px solid #6a5a1e", padding: "2px 6px", borderRadius: 4 }} title="ideia com gancho salvo">🎣 gancho</span>}
-                    {p.scheduledAt && <span style={{ fontSize: 11, color: "#5b8def" }}>📅 {p.scheduledAt.slice(5)}</span>}
-                    {p.metrics?.salvamentos ? <span style={{ fontSize: 11, color: "#22c55e" }}>{p.metrics.salvamentos} salv.</span> : null}
+                  <div className="board-tags">
+                    <span className="board-tag">{p.type || "carrossel"}</span>
+                    {p.savedHook && <span className="board-tag board-tag--gold" title="ideia com gancho salvo">gancho</span>}
+                    {p.scheduledAt && <span className="board-tag board-tag--blue">{p.scheduledAt.slice(5)}</span>}
+                    {p.metrics?.salvamentos ? <span className="board-tag board-tag--green">{p.metrics.salvamentos} salv</span> : null}
                   </div>
                   {/* SINAIS VITAIS — registro do post */}
-                  <div style={{ display: "flex", gap: 4, marginBottom: 8, flexWrap: "wrap" }} title="o registro emocional do post (Sinais Vitais)">
+                  <div className="board-vitals" title="o registro emocional do post (Sinais Vitais)">
                     {REGISTROS.map((r) => {
                       const on = p.registro === r.id;
                       return (
@@ -129,7 +151,7 @@ export default function Board({ onOpen, onCreate }: { onOpen: (c: Carousel) => v
                       );
                     })}
                   </div>
-                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                  <div className="board-actions">
                     {p.carousel.cards.length === 0 ? (
                       <button onClick={() => onCreate?.(p)} style={{ ...mini, color: "#ef476f", borderColor: "#5a1c2c" }} title={p.savedHook ? "abre no Criar com o gancho salvo travado" : "abre no Criar pra escrever o roteiro na voz da marca"}>{p.savedHook ? "✍️ escrever (gancho)" : "✍️ escrever"}</button>
                     ) : (
@@ -142,9 +164,9 @@ export default function Board({ onOpen, onCreate }: { onOpen: (c: Carousel) => v
                   </div>
                 </div>
               ))}
-              {!items.length && <div style={{ color: "#46506a", fontSize: 12, padding: "10px 0", textAlign: "center" }}>{isOver ? "soltar aqui" : "—"}</div>}
+              {!items.length && <div className="studio-empty">{isOver ? "Soltar aqui" : "Vazio"}</div>}
             </div>
-          </div>
+          </section>
         );
       })}
     </div>

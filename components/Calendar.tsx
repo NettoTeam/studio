@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Post, Carousel } from "@/lib/types";
 import { computeDose, sequenceAlerts, convocacaoStatus, REGISTROS, REG_MAP, type Registro } from "@/lib/vitals";
 
@@ -70,47 +70,66 @@ export default function Calendar({ onOpen, onPede }: { onOpen: (c: Carousel) => 
   const conv = convocacaoStatus(ordered.map((p) => p.registro)); // cadência do "pedido"
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
-        <button onClick={() => shift(-1)} style={navb}>◄</button>
-        <span style={{ fontWeight: 700, fontSize: 20 }}>{MES[cur.m]} {cur.y}</span>
-        <button onClick={() => shift(1)} style={navb}>►</button>
-        <span style={{ color: "#7c869c", fontSize: 12, marginLeft: 8 }}>arrasta um conteúdo pra outro dia pra reagendar 🖱️</span>
-      </div>
+    <div className="studio-page">
+      <section className="studio-hero">
+        <div className="studio-hero__copy">
+          <h2>Ritmo, dose e agenda no mesmo mapa</h2>
+          <p>Visualize o mês, ajuste a cadência dos registros e reorganize conteúdos agendados com clareza</p>
+        </div>
+        <div className="studio-hero__side calendar-register-legend" aria-label="Legenda dos registros">
+          {REGISTROS.map((r) => (
+            <div key={r.id} className="calendar-register-item" style={{ ["--reg-color" as string]: r.color }}>
+              <span className="calendar-register-emoji">{r.emoji}</span>
+              <span className="calendar-register-copy">
+                <strong>{r.label}</strong>
+                <small>{r.o_que}</small>
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="studio-section studio-section--pad calendar-toolbar">
+        <button onClick={() => shift(-1)} className="calendar-nav-btn" type="button">‹</button>
+        <span className="calendar-month-title">{MES[cur.m]} {cur.y}</span>
+        <button onClick={() => shift(1)} className="calendar-nav-btn" type="button">›</button>
+        <span className="studio-muted">Arraste conteúdos entre dias para reagendar</span>
+      </section>
 
       {/* A DOSE — como o mês tá dividido (Sinais Vitais) */}
-      <div className="dg-panel" style={{ padding: 16, marginBottom: 18 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-          <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: "#fff", letterSpacing: 1 }}>🔥 A DOSE</span>
-          <div style={{ display: "flex", gap: 2, background: "#101728", border: "1px solid #2a3552", borderRadius: 8, padding: 2 }}>
+      <section className="studio-section studio-section--pad">
+        <div className="studio-section-head">
+          <h3>A Dose</h3>
+          <p>{dose.total} {dose.total === 1 ? "post" : "posts"} em {MES[cur.m].toLowerCase()}</p>
+          <span className="spacer" />
+          <div style={{ display: "flex", gap: 2, background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 9, padding: 2 }}>
             {([["real", "Real (publicado)"], ["plan", "Planejado (agendado)"]] as const).map(([v, l]) => (
               <button key={v} onClick={() => setScope(v)} style={{ fontSize: 11.5, padding: "4px 11px", borderRadius: 6, cursor: "pointer", border: "none", background: scope === v ? "#3a1424" : "transparent", color: scope === v ? "#ff6b8f" : "#9aa0b0", fontWeight: scope === v ? 700 : 400 }}>{l}</button>
             ))}
           </div>
-          <span style={{ fontSize: 12, color: "#8a93a8" }}>{dose.total} {dose.total === 1 ? "post" : "posts"} · {MES[cur.m].toLowerCase()}</span>
         </div>
         {dose.total === 0 ? (
-          <div style={{ fontSize: 13, color: "#7c869c" }}>Nenhum post {scope === "real" ? "publicado" : "agendado"} e <b style={{ color: "#cfcfcf" }}>marcado com registro</b> em {MES[cur.m].toLowerCase()}. No <b style={{ color: "#cfcfcf" }}>Quadro</b>, marca o registro (🩷 🔥 🧠 ⚔️) e {scope === "real" ? "move pra Publicado" : "agenda uma data"} — aí o ritmo aparece aqui.</div>
+          <div className="studio-empty">Nenhum post {scope === "real" ? "publicado" : "agendado"} e marcado com registro em {MES[cur.m].toLowerCase()}</div>
         ) : (
           <>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="dose-bars">
               {dose.rows.map((row) => (
-                <div key={row.info.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ width: 108, fontSize: 13, color: "#cfcfcf", flexShrink: 0 }}>{row.info.emoji} {row.info.label}</span>
-                  <div style={{ flex: 1, height: 14, background: "#101728", borderRadius: 7, overflow: "hidden", position: "relative", border: "1px solid #2a3552" }}>
-                    <div style={{ width: `${Math.round(row.pct * 100)}%`, height: "100%", background: row.info.color, opacity: row.status === "ok" ? 0.85 : 1, transition: "width .2s" }} />
+                <div key={row.info.id} className="dose-row">
+                  <span className="dose-label">{row.info.emoji} {row.info.label}</span>
+                  <div className="dose-track">
+                    <div className="dose-fill" style={{ width: `${Math.round(row.pct * 100)}%`, background: row.info.color, opacity: row.status === "ok" ? 0.85 : 1 }} />
                     {/* marca da meta */}
-                    <div title={`meta ~${Math.round(row.info.target * 100)}%`} style={{ position: "absolute", left: `${Math.round(row.info.target * 100)}%`, top: -2, bottom: -2, width: 2, background: "#fff", opacity: 0.25 }} />
+                    <div className="dose-goal" title={`meta ~${Math.round(row.info.target * 100)}%`} style={{ left: `${Math.round(row.info.target * 100)}%` }} />
                   </div>
-                  <span style={{ width: 42, textAlign: "right", fontSize: 12, color: "#cfcfcf", flexShrink: 0 }}>{Math.round(row.pct * 100)}%</span>
-                  <span style={{ width: 130, fontSize: 11.5, flexShrink: 0, color: row.status === "ok" ? "#5e8a5e" : row.status === "alto" ? "#e08" : "#c99020" }}>{row.nota}</span>
+                  <span style={{ textAlign: "right", fontSize: 12, color: "#cfcfcf" }}>{Math.round(row.pct * 100)}%</span>
+                  <span className="dose-note" style={{ fontSize: 11.5, color: row.status === "ok" ? "#6bd482" : row.status === "alto" ? "#ff6f99" : "#d0a541" }}>{row.nota}</span>
                 </div>
               ))}
             </div>
             {dose.alarme ? (
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #2a3552", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div className="studio-row studio-row--wrap" style={{ marginTop: 14, paddingTop: 13, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                 <span style={{ fontSize: 13, color: "#e8c860" }}>⚠ {dose.alarme}</span>
-                {dose.pede && <span style={{ fontSize: 13, color: "#cfcfcf" }}>O ritmo pede <b style={{ color: REG_MAP[dose.pede].color }}>{REG_MAP[dose.pede].emoji} {REG_MAP[dose.pede].label}</b>.</span>}
+                {dose.pede && <span style={{ fontSize: 13, color: "#cfcfcf" }}>O ritmo pede <b style={{ color: REG_MAP[dose.pede].color }}>{REG_MAP[dose.pede].emoji} {REG_MAP[dose.pede].label}</b></span>}
                 {dose.pede && onPede && (
                   <button onClick={() => onPede(dose.pede!)} className="dg-btn-primary" style={{ fontSize: 12, padding: "6px 13px" }}>
                     criar {REG_MAP[dose.pede].emoji} {REG_MAP[dose.pede].label} →
@@ -118,7 +137,7 @@ export default function Calendar({ onOpen, onPede }: { onOpen: (c: Carousel) => 
                 )}
               </div>
             ) : (
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #2a3552", fontSize: 13, color: "#5e8a5e" }}>✓ ritmo equilibrado{dose.total < 3 ? " (poucos posts ainda — marca mais pra afinar a leitura)" : ""}.</div>
+              <div style={{ marginTop: 14, paddingTop: 13, borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 13, color: "#6bd482" }}>✓ ritmo equilibrado{dose.total < 3 ? " (poucos posts ainda)" : ""}</div>
             )}
             {seqAlerts.length > 0 && (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -131,14 +150,14 @@ export default function Calendar({ onOpen, onPede }: { onOpen: (c: Carousel) => 
               </div>
             )}
             {/* CONVOCAÇÃO — o pedido, por cadência (não por proporção) */}
-            <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #2a3552", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <div className="studio-row studio-row--wrap" style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
               <span style={{ fontSize: 12.5, color: REG_MAP.convocacao.color, flexShrink: 0 }}>⚔️ o pedido</span>
               {conv.pede ? (
                 <>
                   <span style={{ fontSize: 12.5, color: "#cfcfcf" }}>
                     {conv.never
-                      ? `${conv.n} posts e nenhuma convocação no mês — só entregou, nunca chamou pra dentro. Já mereceu pedir.`
-                      : `${conv.desde} posts desde a última convocação — entregou bastante, hora de chamar pra dentro.`}
+                      ? `${conv.n} posts e nenhuma convocação no mês — só entregou, nunca chamou pra dentro; já mereceu pedir`
+                      : `${conv.desde} posts desde a última convocação — entregou bastante, hora de chamar pra dentro`}
                   </span>
                   {onPede && (
                     <button onClick={() => onPede("convocacao")} className="dg-btn-primary" style={{ fontSize: 12, padding: "6px 13px" }}>
@@ -148,34 +167,33 @@ export default function Calendar({ onOpen, onPede }: { onOpen: (c: Carousel) => 
                 </>
               ) : (
                 <span style={{ fontSize: 12.5, color: "#5e8a5e" }}>
-                  {conv.never ? "ainda cedo no mês — entrega antes de chamar." : `✓ já chamou há ${conv.desde} ${conv.desde === 1 ? "post" : "posts"} — segue entregando.`}
+                  {conv.never ? "ainda cedo no mês — entrega antes de chamar" : `✓ já chamou há ${conv.desde} ${conv.desde === 1 ? "post" : "posts"} — segue entregando`}
                 </span>
               )}
             </div>
           </>
         )}
-      </div>
+      </section>
 
       {/* PLANO DA SEMANA — diretriz proativa: qual registro em cada dia (Sinais Vitais) */}
-      <div className="dg-panel" style={{ padding: 16, marginBottom: 18 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
-          <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: "#fff", letterSpacing: 1 }}>📋 PLANO DA SEMANA</span>
-          <span style={{ fontSize: 11.5, color: "#7c869c" }}>o registro de cada dia — vira a diretriz &quot;hoje é dia de X&quot; na tela Hoje</span>
-          <span style={{ flex: 1 }} />
+      <section className="studio-section studio-section--pad">
+        <div className="studio-section-head">
+          <h3>Plano da semana</h3>
+          <p>registro de cada dia</p>
+          <span className="spacer" />
           {weekDirty && <button onClick={saveWeek} className="dg-btn-primary" style={{ fontSize: 12, padding: "5px 13px" }}>salvar plano</button>}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6, marginTop: 10 }}>
+        <div className="week-grid">
           {DOW.map((d, dow) => (
-            <div key={d} style={{ background: dow === todayDow ? "#1a1424" : "#101728", border: "1px solid " + (dow === todayDow ? "#5a1c2c" : "#2a3552"), borderRadius: 8, padding: 8, textAlign: "center" }}>
-              <div style={{ fontSize: 11, color: dow === todayDow ? "#ef476f" : "#8a93a8", fontWeight: 700, marginBottom: 7 }}>{d}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div key={d} className={"week-day" + (dow === todayDow ? " is-today" : "")}>
+              <div className="week-name">{d}</div>
+              <div className="week-options">
                 {REGISTROS.map((r) => {
                   const on = week[dow] === r.id;
                   return (
                     <button key={r.id} onClick={() => setDay(dow, r.id)} title={r.label}
-                      style={{ fontSize: 13, padding: "3px 0", borderRadius: 6, cursor: "pointer", lineHeight: 1.1,
-                        background: on ? r.color + "26" : "transparent", color: on ? r.color : "#56607c",
-                        border: "1px solid " + (on ? r.color : "#2a3552"), fontWeight: on ? 700 : 400 }}>
+                      className={"week-reg-btn" + (on ? " is-on" : "")}
+                      style={{ ["--reg-color" as string]: r.color }}>
                       {r.emoji}{on ? " " + r.label.slice(0, 3) : ""}
                     </button>
                   );
@@ -184,10 +202,11 @@ export default function Calendar({ onOpen, onPede }: { onOpen: (c: Carousel) => 
             </div>
           ))}
         </div>
-      </div>
+      </section>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
-        {DOW.map((d) => <div key={d} style={{ color: "#7c869c", fontSize: 12, textAlign: "center", paddingBottom: 4 }}>{d}</div>)}
+      <section className="studio-section studio-section--pad">
+      <div className="calendar-grid">
+        {DOW.map((d) => <div key={d} className="calendar-dow">{d}</div>)}
         {cells.map((d, i) => {
           if (d === null) return <div key={i} />;
           const ds = `${ym}-${String(d).padStart(2, "0")}`;
@@ -199,14 +218,15 @@ export default function Calendar({ onOpen, onPede }: { onOpen: (c: Carousel) => 
               onDragOver={(e) => { e.preventDefault(); if (overDay !== ds) setOverDay(ds); }}
               onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverDay((o) => (o === ds ? null : o)); }}
               onDrop={() => dropOn(ds)}
-              style={{ minWidth: 0, minHeight: 96, background: isOver ? "#1a1424" : "#101728", border: "1px solid " + (isOver ? "#ef476f" : isToday ? "#ef476f" : "#2a3552"), outline: isOver ? "2px dashed #ef476f" : "none", borderRadius: 8, padding: 6, transition: "background .12s" }}>
-              <div style={{ fontSize: 12, color: isToday ? "#ef476f" : "#8a93a8", fontWeight: isToday ? 700 : 400, marginBottom: 4 }}>{d}</div>
+              className={"calendar-day" + (isToday ? " is-today" : "") + (isOver ? " is-over" : "")}>
+              <div className="calendar-day-num">{d}</div>
               {list.map((p) => (
                 <div key={p.id} draggable
                   onDragStart={(e) => { dragId.current = p.id; e.dataTransfer.effectAllowed = "move"; }}
                   onDragEnd={() => { dragId.current = null; setOverDay(null); }}
                   onClick={() => onOpen(p.carousel)} title={p.tema + (p.registro ? ` · ${REG_MAP[p.registro].label}` : "")}
-                  style={{ background: "#241420", border: "1px solid " + (p.registro ? REG_MAP[p.registro].color + "88" : "#5a1c2c"), borderLeft: p.registro ? `3px solid ${REG_MAP[p.registro].color}` : "1px solid #5a1c2c", color: "#f0c4d0", fontSize: 10, borderRadius: 4, padding: "3px 5px", marginBottom: 3, cursor: "grab", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  className="calendar-event"
+                  style={{ ["--event-color" as string]: p.registro ? REG_MAP[p.registro].color : "#ef476f" }}>
                   {p.registro ? REG_MAP[p.registro].emoji + " " : ""}{(p.carousel.cards[0]?.headline || p.tema).replace(/\*\*/g, "")}
                 </div>
               ))}
@@ -214,9 +234,8 @@ export default function Calendar({ onOpen, onPede }: { onOpen: (c: Carousel) => 
           );
         })}
       </div>
-      <div style={{ color: "#7c869c", fontSize: 13, marginTop: 14 }}>Pra agendar um conteúdo novo: vá no <b style={{ color: "#cfcfcf" }}>Quadro</b> e escolha a data no card. Aqui você <b style={{ color: "#cfcfcf" }}>arrasta entre os dias</b> pra reagendar e clica pra abrir no editor.</div>
+      </section>
+      <div className="studio-note">Para agendar um conteúdo novo, use a data no card do Quadro. Aqui a grade serve para reagendar e abrir o editor</div>
     </div>
   );
 }
-
-const navb: CSSProperties = { background: "#1b2a4a", color: "#f5f5f5", border: "1px solid #2a3552", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 16 };

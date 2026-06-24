@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 
 type Src = { id: string; title: string; kind?: string; url?: string; tags?: string; chars: number; chunks?: number; createdAt?: string };
 
-const KIND_ICO: Record<string, string> = { pdf: "📄", url: "🔗", texto: "✍️", livro: "📚" };
+const KIND_ICO: Record<string, string> = { pdf: "PDF", url: "URL", texto: "TXT", livro: "LIV" };
+const KIND_LABEL: Record<string, string> = { pdf: "PDF", url: "URL", texto: "Texto", livro: "Livro" };
 
 export default function Fontes() {
   const [sources, setSources] = useState<Src[]>([]);
@@ -21,7 +22,16 @@ export default function Fontes() {
     const d = await r.json();
     setSources(d.sources || []);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    let alive = true;
+    async function boot() {
+      const r = await fetch("/api/sources");
+      const d = await r.json();
+      if (alive) setSources(d.sources || []);
+    }
+    boot().catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   function flash(m: string) { setMsg(m); setTimeout(() => setMsg(""), 3000); }
 
@@ -63,67 +73,100 @@ export default function Fontes() {
     load();
   }
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <div style={{ color: "#9aa0b0", fontSize: 14, maxWidth: 720, lineHeight: 1.5 }}>
-        Sua <b style={{ color: "#cfcfcf" }}>biblioteca</b> — livros, estudos, material completo. Isto vira <b style={{ color: "#ef476f" }}>conhecimento de fundo da IA</b>: ela usa de repertório em tudo que gera, sem você precisar selecionar nada. <span style={{ color: "#7c869c" }}>(Pra embasar UM conteúdo específico num artigo, use o campo "Fonte deste conteúdo" lá na tela Criar.)</span>
-      </div>
+  const pdfs = sources.filter((s) => s.kind === "pdf").length;
+  const urls = sources.filter((s) => s.kind === "url").length;
+  const texts = sources.filter((s) => !s.kind || s.kind === "texto").length;
+  const indexed = sources.reduce((acc, s) => acc + (s.kind === "livro" ? (s.chunks || 0) : Math.round((s.chars || 0) / 1000)), 0);
 
-      <div className="dg-panel" style={{ padding: 16 }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+  return (
+    <div className="studio-page sources-page">
+      <section className="studio-hero">
+        <div className="studio-hero__copy">
+          <h2>Fontes que dão repertório para a IA</h2>
+          <p>Livros, estudos, artigos e textos de referência ficam organizados aqui para sustentar as próximas gerações com contexto real</p>
+        </div>
+        <div className="studio-hero__side">
+          <div className="studio-stat"><strong>{sources.length}</strong><span>Fontes</span></div>
+          <div className="studio-stat"><strong>{pdfs}</strong><span>PDFs</span></div>
+          <div className="studio-stat"><strong>{urls}</strong><span>URLs</span></div>
+          <div className="studio-stat"><strong>{indexed.toLocaleString("pt-BR")}</strong><span>Base</span></div>
+        </div>
+      </section>
+
+      <section className="studio-section studio-section--pad source-ingest">
+        <div className="studio-section-head">
+          <h3>Adicionar fonte</h3>
+          <p>PDF, texto colado ou URL importada para consulta permanente</p>
+          <span className="spacer" />
+          {msg && <span className={"source-message" + (msg.startsWith("⚠") ? " is-error" : "")}>{msg}</span>}
+        </div>
+
+        <div className="source-tabs" role="tablist" aria-label="Tipo de fonte">
           {(["pdf", "texto", "url"] as const).map((t) => (
-            <button key={t} onClick={() => setTab(t)}
-              style={{ background: tab === t ? "#ef476f" : "transparent", color: tab === t ? "#fff" : "#9aa0b0", border: "1px solid " + (tab === t ? "#ef476f" : "#3d4d6d"), borderRadius: 8, padding: "7px 16px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
-              {KIND_ICO[t]} {t === "pdf" ? "PDF" : t === "texto" ? "Colar texto" : "Importar URL"}
+            <button key={t} onClick={() => setTab(t)} className={"source-tab" + (tab === t ? " is-active" : "")}>
+              <span>{KIND_ICO[t]}</span>
+              {t === "pdf" ? "PDF" : t === "texto" ? "Colar texto" : "Importar URL"}
             </button>
           ))}
         </div>
 
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título da fonte (opcional)"
-          className="dg-input" style={{ width: "100%", marginBottom: 10 }} />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título da fonte (opcional)" className="studio-input source-title" />
 
         {tab === "pdf" && (
-          <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); uploadPdf(e.dataTransfer.files); }}
+          <div
+            className="source-drop"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); uploadPdf(e.dataTransfer.files); }}
             onClick={() => fileRef.current?.click()}
-            style={{ border: "1.5px dashed #2a3552", borderRadius: 12, padding: "34px 16px", textAlign: "center", cursor: "pointer", color: "#9aa0b0", background: "#101728" }}>
-            <div style={{ fontSize: 30, marginBottom: 6 }}>📄</div>
-            {busy ? "Lendo o PDF..." : "Arrasta o PDF aqui ou clica pra escolher"}
+          >
+            <div className="source-drop-mark">PDF</div>
+            <strong>{busy ? "Lendo o PDF" : "Arrasta o PDF aqui ou clica para escolher"}</strong>
+            <span>Vários arquivos podem entrar de uma vez</span>
             <input ref={fileRef} type="file" accept="application/pdf" multiple hidden onChange={(e) => uploadPdf(e.target.files)} />
           </div>
         )}
 
         {tab === "texto" && (
-          <div>
-            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Cola o trecho do estudo/artigo..."
-              className="dg-input" style={{ width: "100%", height: 150, resize: "vertical", fontSize: 14 }} />
-            <button onClick={addText} disabled={busy} className="dg-btn-primary" style={{ marginTop: 10, padding: "9px 20px" }}>{busy ? "Salvando..." : "Adicionar texto"}</button>
+          <div className="source-form">
+            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Cola o trecho do estudo, artigo ou anotação" className="studio-textarea source-textarea" />
+            <button onClick={addText} disabled={busy} className="dg-btn-primary">{busy ? "Salvando" : "Adicionar texto"}</button>
           </div>
         )}
 
         {tab === "url" && (
-          <div style={{ display: "flex", gap: 10 }}>
-            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://artigo.com/estudo..." className="dg-input" style={{ flex: 1 }} />
-            <button onClick={addUrl} disabled={busy} className="dg-btn-primary" style={{ padding: "9px 20px", whiteSpace: "nowrap" }}>{busy ? "Importando..." : "Importar"}</button>
+          <div className="source-url-row">
+            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://artigo.com/estudo" className="studio-input" />
+            <button onClick={addUrl} disabled={busy} className="dg-btn-primary">{busy ? "Importando" : "Importar"}</button>
           </div>
         )}
+      </section>
 
-        {msg && <div style={{ marginTop: 10, color: msg.startsWith("⚠") ? "#e08" : "#4caf50", fontSize: 13 }}>{msg}</div>}
-      </div>
+      <section className="studio-section studio-section--pad">
+        <div className="studio-section-head">
+          <h3>Base indexada</h3>
+          <p>{pdfs} PDFs · {urls} URLs · {texts} textos colados</p>
+        </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div className="dg-kicker">{sources.length} fonte(s) na base</div>
-        {!sources.length && <div style={{ color: "#56607c", fontSize: 13 }}>Base vazia. Sobe um PDF que ela aparece aqui.</div>}
-        {sources.map((s) => (
-          <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "#101728", border: "1px solid #2a3552", borderRadius: 10, padding: "12px 14px" }}>
-            <span style={{ fontSize: 20 }}>{KIND_ICO[s.kind || "texto"]}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.title}</div>
-              <div style={{ color: "#7c869c", fontSize: 12 }}>{s.kind === "livro" ? `${(s.chunks || 0).toLocaleString("pt-BR")} trechos indexados` : `${(s.chars / 1000).toFixed(1)}k caracteres`}{s.createdAt ? " · " + new Date(s.createdAt).toLocaleDateString("pt-BR") : ""}</div>
-            </div>
-            <button onClick={() => del(s.id)} style={{ background: "transparent", color: "#e0738c", border: "1px solid #2a3552", borderRadius: 6, padding: "5px 11px", cursor: "pointer", fontSize: 12 }}>excluir</button>
+        {!sources.length ? (
+          <div className="studio-empty">Base vazia. Sobe um PDF ou cola um texto para começar</div>
+        ) : (
+          <div className="source-list">
+            {sources.map((s) => (
+              <article key={s.id} className="source-card">
+                <span className="source-kind">{KIND_ICO[s.kind || "texto"]}</span>
+                <div className="source-card-main">
+                  <strong>{s.title}</strong>
+                  <span>
+                    {KIND_LABEL[s.kind || "texto"]} · {s.kind === "livro" ? `${(s.chunks || 0).toLocaleString("pt-BR")} trechos indexados` : `${((s.chars || 0) / 1000).toFixed(1)}k caracteres`}
+                    {s.createdAt ? " · " + new Date(s.createdAt).toLocaleDateString("pt-BR") : ""}
+                  </span>
+                </div>
+                <button onClick={() => del(s.id)} className="studio-danger-btn">excluir</button>
+              </article>
+            ))}
           </div>
-        ))}
-      </div>
+        )}
+      </section>
     </div>
   );
 }

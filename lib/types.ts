@@ -169,7 +169,7 @@ export interface Post {
   outline?: string;         // o esqueleto/arco gerado (passada 1) — pra virar estrutura-ouro
   hook?: string;            // tipo de gancho usado
   emotions?: string[];      // emoções primais usadas
-  registro?: "porrada" | "ferida" | "ensino" | "convocacao"; // Sinais Vitais — o registro emocional do post
+  registro?: "porrada" | "ferida" | "ensino" | "convocacao" | "dominio" | "darkside"; // Sinais Vitais — registro/tom (= type Registro em lib/vitals)
   content?: string;         // conteúdo bruto de origem (pra retomar a geração de uma ideia)
   savedHook?: { capa: string; abertura: string }; // gancho salvo no Quadro pra virar carrossel depois
 }

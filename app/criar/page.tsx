@@ -129,12 +129,18 @@ export default function CriarPage() {
   const previewRef = useRef<HTMLDivElement>(null);
   const [hbase, setHbase] = useState<{ title?: { x: number; y: number }; body?: { x: number; y: number }; text?: { x: number; y: number } }>({});
   useLayoutEffect(() => {
+    let alive = true;
+    const commit = (next: typeof hbase) => {
+      window.requestAnimationFrame(() => {
+        if (alive) setHbase(next);
+      });
+    };
     const frame = previewRef.current;
-    if (!frame || selected == null) { setHbase({}); return; }
+    if (!frame || selected == null) { commit({}); return () => { alive = false; }; }
     const c = carousel.cards[selected];
-    if (!c) { setHbase({}); return; }
+    if (!c) { commit({}); return () => { alive = false; }; }
     const fr = frame.getBoundingClientRect();
-    if (!fr.width) return;
+    if (!fr.width) return () => { alive = false; };
     const center = (el: Element | null) => {
       if (!el) return undefined;
       const r = el.getBoundingClientRect();
@@ -150,55 +156,59 @@ export default function CriarPage() {
       const m = titleC || bodyC;
       if (m) nb.text = { x: m.x - (c.textX || 0), y: m.y - (c.textY || 0) };
     }
-    setHbase(nb);
+    commit(nb);
+    return () => { alive = false; };
   }, [selected, carousel]);
 
   // auto-save do rascunho (localStorage) — carrossel + legenda + campos
   const hydrated = useRef(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   useEffect(() => {
-    let hadCards = false;
-    try {
-      const s = localStorage.getItem("dg_draft");
-      if (s) {
-        const d = JSON.parse(s);
-        const car = d?.carousel ?? (d?.cards ? d : null); // compat: formato antigo era o carrossel cru
-        if (car?.cards?.length) { setCarousel(car); setStage("carrossel"); hadCards = true; }
-        if (typeof d?.legenda === "string") setLegenda(d.legenda);
-        if (typeof d?.roteiro === "string") setRoteiro(d.roteiro);
-        if (typeof d?.content === "string") setContent(d.content);
-        if (typeof d?.nCards === "number") setNCards(d.nCards);
-        if (typeof d?.registro === "string") setRegistro(d.registro);
-        if (typeof d?.hook === "string") setHook(d.hook);
-        if (Array.isArray(d?.emotions)) setEmotions(d.emotions);
-        if (typeof d?.caption === "boolean") setCaption(d.caption);
-        if (typeof d?.chosenHook === "string") setChosenHook(d.chosenHook);
-        if (typeof d?.chosenCover === "string") setChosenCover(d.chosenCover);
-        if (typeof d?.correlation === "string") setCorrelation(d.correlation);
-        if (typeof d?.inlineSrc === "string") setInlineSrc(d.inlineSrc);
-        if (typeof d?.inlineName === "string") setInlineName(d.inlineName);
-      }
-    } catch {}
-    // aplica a INTENÇÃO vinda de outra tela (Hoje/Quadro/Calendário/Marca/Vault), sobrepondo o rascunho
-    try {
-      const intent = takeIntent();
-      if (intent) {
-        if (intent.kind === "open") { setCarousel(intent.carousel); setStage("carrossel"); }
-        else if (intent.kind === "resume") { setStage(hadCards ? "carrossel" : "texto"); }
-        else if (intent.kind === "novo") { clearAll(); }
-        else if (intent.kind === "pede") { setRegistro(intent.registro); setChosenHook(""); setChosenCover(""); setHooks([]); setRoteiro(""); setAiDraft(""); setStage("texto"); }
-        else if (intent.kind === "pauta") { setContent(`Tema: ${intent.tema}\nÂngulo: ${intent.angulo}`); setChosenHook(""); setChosenCover(""); setHooks([]); setRoteiro(""); setAiDraft(""); setStage("texto"); }
-        else if (intent.kind === "hook") {
-          const post = intent.post;
-          setContent(post.content || post.tema || "");
-          setRegistro(post.registro || "");
-          if (post.savedHook) { setChosenCover(post.savedHook.capa || ""); setChosenHook((post.savedHook.abertura || "").replace(/\*\*/g, "")); }
-          else { setChosenCover(""); setChosenHook(""); }
-          setHooks([]); setRoteiro(""); setAiDraft(""); setStage("texto");
+    const timer = window.setTimeout(() => {
+      let hadCards = false;
+      try {
+        const s = localStorage.getItem("dg_draft");
+        if (s) {
+          const d = JSON.parse(s);
+          const car = d?.carousel ?? (d?.cards ? d : null); // compat: formato antigo era o carrossel cru
+          if (car?.cards?.length) { setCarousel(car); setStage("carrossel"); hadCards = true; }
+          if (typeof d?.legenda === "string") setLegenda(d.legenda);
+          if (typeof d?.roteiro === "string") setRoteiro(d.roteiro);
+          if (typeof d?.content === "string") setContent(d.content);
+          if (typeof d?.nCards === "number") setNCards(d.nCards);
+          if (typeof d?.registro === "string") setRegistro(d.registro);
+          if (typeof d?.hook === "string") setHook(d.hook);
+          if (Array.isArray(d?.emotions)) setEmotions(d.emotions);
+          if (typeof d?.caption === "boolean") setCaption(d.caption);
+          if (typeof d?.chosenHook === "string") setChosenHook(d.chosenHook);
+          if (typeof d?.chosenCover === "string") setChosenCover(d.chosenCover);
+          if (typeof d?.correlation === "string") setCorrelation(d.correlation);
+          if (typeof d?.inlineSrc === "string") setInlineSrc(d.inlineSrc);
+          if (typeof d?.inlineName === "string") setInlineName(d.inlineName);
         }
-      }
-    } catch {}
-    hydrated.current = true;
+      } catch {}
+      // aplica a INTENÇÃO vinda de outra tela (Hoje/Quadro/Calendário/Marca/Vault), sobrepondo o rascunho
+      try {
+        const intent = takeIntent();
+        if (intent) {
+          if (intent.kind === "open") { setCarousel(intent.carousel); setStage("carrossel"); }
+          else if (intent.kind === "resume") { setStage(hadCards ? "carrossel" : "texto"); }
+          else if (intent.kind === "novo") { clearAll(); }
+          else if (intent.kind === "pede") { setRegistro(intent.registro); setChosenHook(""); setChosenCover(""); setHooks([]); setRoteiro(""); setAiDraft(""); setStage("texto"); }
+          else if (intent.kind === "pauta") { setContent(`Tema: ${intent.tema}\nÂngulo: ${intent.angulo}`); setChosenHook(""); setChosenCover(""); setHooks([]); setRoteiro(""); setAiDraft(""); setStage("texto"); }
+          else if (intent.kind === "hook") {
+            const post = intent.post;
+            setContent(post.content || post.tema || "");
+            setRegistro(post.registro || "");
+            if (post.savedHook) { setChosenCover(post.savedHook.capa || ""); setChosenHook((post.savedHook.abertura || "").replace(/\*\*/g, "")); }
+            else { setChosenCover(""); setChosenHook(""); }
+            setHooks([]); setRoteiro(""); setAiDraft(""); setStage("texto");
+          }
+        }
+      } catch {}
+      hydrated.current = true;
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
   useEffect(() => {
     if (!hydrated.current) return; // não grava antes de restaurar (evita sobrescrever com vazio)
@@ -275,7 +285,7 @@ export default function CriarPage() {
     setSelected(null);
   }
   function addCard() {
-    mutateCards((cards) => [...cards, { id: crypto.randomUUID(), layout: "text", headline: "NOVO CARD", body: "Escreve aqui..." }]);
+    mutateCards((cards) => [...cards, { id: crypto.randomUUID(), layout: "text", headline: "NOVO CARD", body: "Escreve aqui" }]);
   }
   function reorderCard(from: number, to: number) {
     mutateCards((cards) => { const a = [...cards]; const [m] = a.splice(from, 1); a.splice(to, 0, m); return a; });
@@ -304,7 +314,12 @@ export default function CriarPage() {
   const draftData = () => ({ carousel, legenda, roteiro, content, nCards, registro, hook, emotions, caption, chosenHook, chosenCover, correlation, inlineSrc, inlineName });
   const [drafts, setDrafts] = useState<{ id: string; name: string; at: number; data: ReturnType<typeof draftData> }[]>([]);
   const [draftsOpen, setDraftsOpen] = useState(false);
-  useEffect(() => { try { setDrafts(JSON.parse(localStorage.getItem("n2_drafts") || "[]")); } catch {} }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try { setDrafts(JSON.parse(localStorage.getItem("n2_drafts") || "[]")); } catch {}
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   function persistDrafts(list: typeof drafts) { setDrafts(list); try { localStorage.setItem("n2_drafts", JSON.stringify(list)); } catch {} }
   function saveNamedDraft() {
     const name = prompt("Nome deste rascunho:", carousel.tema || "Sem título");
@@ -386,7 +401,7 @@ export default function CriarPage() {
     const w = window as unknown as { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> };
     if (!w.showDirectoryPicker) { await exportAll(); return; }
     const dir = await w.showDirectoryPicker();
-    setSaveMsg("Salvando na pasta...");
+    setSaveMsg("Salvando na pasta");
     await withExportNodes(async () => {
       for (let i = 0; i < carousel.cards.length; i++) {
         const node = refs.current[i];
@@ -472,7 +487,7 @@ export default function CriarPage() {
   }
   function novoConteudo() {
     const temAlgo = content.trim() || roteiro.trim() || carousel.cards.length || hooks.length;
-    if (temAlgo && !confirm("Começar do zero? Isso limpa o conteúdo, o roteiro e o carrossel atuais desta tela. O que você já guardou no Quadro/Vault continua lá.")) return;
+    if (temAlgo && !confirm("Começar do zero? Isso limpa o conteúdo, o roteiro e o carrossel atuais desta tela; o que você já guardou no Quadro/Vault continua lá")) return;
     clearAll();
     toast("✓ tela nova — pode começar do zero");
   }
@@ -497,7 +512,7 @@ export default function CriarPage() {
   }
   // ETAPA 2 — com o roteiro aprovado, gera o CARROSSEL (fatia em cards, sem reescrever).
   async function generateCards() {
-    if (!roteiro.trim()) { setErr("Gera/aprova o roteiro primeiro."); return; }
+    if (!roteiro.trim()) { setErr("Gera/aprova o roteiro primeiro"); return; }
     setErr(""); setCardsLoad(true);
     try {
       const r = await fetch("/api/cards", {
@@ -507,9 +522,9 @@ export default function CriarPage() {
       const raw = await r.text();
       let d: { carousel?: Carousel; legenda?: string; error?: string };
       try { d = JSON.parse(raw); }
-      catch { throw new Error(r.status === 504 || /timeout|error occurred/i.test(raw) ? "O fatiador demorou demais e o servidor cortou. Teu roteiro tá salvo — clica em “Gerar carrossel” de novo (costuma passar na 2ª)." : "O servidor respondeu fora do formato. Teu roteiro tá salvo — tenta gerar o carrossel de novo."); }
+      catch { throw new Error(r.status === 504 || /timeout|error occurred/i.test(raw) ? "O fatiador demorou demais e o servidor cortou — teu roteiro tá salvo, clica em “Gerar carrossel” de novo (costuma passar na 2ª)" : "O servidor respondeu fora do formato — teu roteiro tá salvo, tenta gerar o carrossel de novo"); }
       if (!r.ok) throw new Error(d.error || "Erro");
-      if (!d.carousel) throw new Error("O fatiador não devolveu os cards. Teu roteiro tá salvo — tenta de novo.");
+      if (!d.carousel) throw new Error("O fatiador não devolveu os cards — teu roteiro tá salvo, tenta de novo");
       setCarousel(d.carousel);
       setLegenda(d.legenda || "");
       setOutline(roteiro);
@@ -528,45 +543,54 @@ export default function CriarPage() {
   }
 
   async function exportOne(i: number) {
-    setSaveMsg("Baixando...");
+    setSaveMsg("Baixando");
     await withExportNodes(() => downloadCard(i));
     setSaveMsg("Baixado ✓"); setTimeout(() => setSaveMsg(""), 1500);
   }
   async function exportAll() {
-    setSaveMsg("Baixando todos...");
+    setSaveMsg("Baixando todos");
     await withExportNodes(async () => {
       for (let i = 0; i < carousel.cards.length; i++) { await downloadCard(i); await new Promise((r) => setTimeout(r, 200)); }
     });
     setSaveMsg("Baixado ✓"); setTimeout(() => setSaveMsg(""), 2000);
   }
 
+  const hasDraft = !!(content.trim() || roteiro.trim() || carousel.cards.length || hooks.length);
+
   return (
-        <>
+        <div className="studio-page create-page">
+          <section className="studio-hero create-hero">
+            <div className="studio-hero__copy">
+              <h2>Da ideia ao carrossel pronto para postar</h2>
+              <p>Construa o roteiro, trave o gancho, gere os cards e refine cada peça com a voz da marca no mesmo fluxo</p>
+            </div>
+          </section>
+
           {/* barra de estado + começar do zero */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12.5, color: "var(--dg-faint)" }}>
+          <div className="create-status">
+            <span>
               {(content.trim() || roteiro.trim() || carousel.cards.length)
                 ? <>📝 rascunho em andamento {carousel.cards.length ? `· ${carousel.cards.length} cards` : roteiro.trim() ? "· roteiro pronto" : "· escrevendo"} — salvo automático</>
                 : "tela nova — começa colando um conteúdo abaixo"}
             </span>
-            <span style={{ flex: 1 }} />
-            {(content.trim() || roteiro.trim() || carousel.cards.length || hooks.length) ? (
+            {hasDraft ? (
               <button onClick={novoConteudo} className="dg-btn" style={{ fontSize: 12.5, padding: "6px 13px" }}>✕ Começar do zero</button>
             ) : null}
           </div>
 
           {/* STEPPER — ① Texto → ② Carrossel */}
-          <div style={{ display: "flex", alignItems: "stretch", gap: 0, marginBottom: 22, border: "1px solid var(--dg-line)", borderRadius: 12, overflow: "hidden", background: "var(--dg-surface)", maxWidth: 520 }}>
+          <div className="create-stepper">
             {([["texto", "①", "Texto", "escreve e aprova o roteiro"], ["carrossel", "②", "Carrossel", "monta e edita os cards"]] as const).map(([st, num, label, sub], idx) => {
               const active = stage === st;
               const locked = st === "carrossel" && carousel.cards.length === 0;
               return (
                 <button key={st} onClick={() => { if (!locked) setStage(st); }} disabled={locked}
-                  style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: "12px 16px", cursor: locked ? "not-allowed" : "pointer", background: active ? "#1b2440" : "transparent", borderLeft: idx === 1 ? "1px solid #2e2e36" : "none", opacity: locked ? 0.45 : 1 }}>
-                  <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, lineHeight: 1, color: active ? "#ef476f" : "#667" }}>{num}</span>
-                  <span style={{ display: "flex", flexDirection: "column" }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: active ? "#fff" : "#9aa0b0" }}>{label}</span>
-                    <span style={{ fontSize: 11, color: active ? "#b6a6ad" : "#5a6378" }}>{locked ? "gere o roteiro primeiro" : sub}</span>
+                  className={"create-step" + (active ? " is-active" : "") + (locked ? " is-locked" : "")}
+                  style={{ borderLeft: idx === 1 ? "1px solid rgba(255,255,255,0.08)" : "none" }}>
+                  <span className="create-step-num">{num}</span>
+                  <span className="create-step-copy">
+                    <strong>{label}</strong>
+                    <small>{locked ? "gere o roteiro primeiro" : sub}</small>
                   </span>
                 </button>
               );
@@ -574,12 +598,12 @@ export default function CriarPage() {
           </div>
 
           {stage === "texto" && (<>
-          <div className="dg-panel" style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 24, padding: 16 }}>
-            <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Cola aqui o conteúdo bruto..."
+          <div className="studio-section studio-section--pad create-compose" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Cola aqui o conteúdo bruto"
               className="dg-input" style={{ width: "100%", height: 130, fontSize: 15, resize: "vertical" }} />
 
             {/* TOM (registro — Sinais Vitais). Gira ANTES; a IA escreve neste tom. */}
-            <div className="dg-box" style={{ padding: 10 }}>
+            <div className="dg-box create-control-card" style={{ padding: 10 }}>
               <div className="dg-kicker" style={{ marginBottom: 6 }}>🫀 Tom do post <span style={{ color: "#7c869c", textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>— a IA escreve neste registro</span></div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {REGISTROS.map((r) => {
@@ -602,7 +626,7 @@ export default function CriarPage() {
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
 
               {/* gancho & emoção (frameworks — seu controle) */}
-              <div className="dg-box" style={{ minWidth: 260, padding: 10 }}>
+              <div className="dg-box create-control-card" style={{ minWidth: 260, padding: 10 }}>
                 <div className="dg-kicker" style={{ marginBottom: 6 }}>🎣 Gancho & emoção</div>
                 <select value={hook} onChange={(e) => setHook(e.target.value)} title="Tipo de gancho do card 1"
                   style={{ width: "100%", background: "#17171b", color: "#f5f5f5", border: "1px solid #2e2e36", borderRadius: 8, padding: "8px 10px", marginBottom: 8, fontSize: 13 }}>
@@ -624,7 +648,7 @@ export default function CriarPage() {
                   <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed #2e2e36" }}>
                     {correlation ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                        <span style={{ flex: 1, color: "#7fd0c0" }}>🔗 ponte: {correlation.slice(0, 60)}{correlation.length > 60 ? "…" : ""}</span>
+                        <span style={{ flex: 1, color: "#7fd0c0" }}>🔗 ponte: {correlation.slice(0, 60)}</span>
                         <button onClick={() => setCorrelation("")} style={{ fontSize: 11, background: "transparent", color: "#e0738c", border: "1px solid #3d3d4d", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>tirar</button>
                       </div>
                     ) : (
@@ -636,7 +660,7 @@ export default function CriarPage() {
                         </div>
                         <div style={{ fontSize: 10.5, color: "#7c869c", margin: "5px 0" }}>ou deixa o Exa achar um tema atemporal/relacionável:</div>
                         <button onClick={findCorrelations} disabled={corrLoad} style={{ fontSize: 12, background: "#16201f", color: "#7fd0c0", border: "1px solid #2c4c48", borderRadius: 7, padding: "5px 12px", cursor: "pointer" }}>
-                          {corrLoad ? "buscando pontes…" : "🔎 buscar pontes (Exa)"}
+                          {corrLoad ? "buscando pontes" : "🔎 buscar pontes (Exa)"}
                         </button>
                         {corrErr && <div style={{ fontSize: 11, color: "#e08", marginTop: 5 }}>{corrErr}</div>}
                         {corrCands.length > 0 && (
@@ -658,7 +682,7 @@ export default function CriarPage() {
               </div>
 
               {/* fonte deste conteúdo */}
-              <div className="dg-box" style={{ flex: 1, minWidth: 280, padding: 10 }}>
+              <div className="dg-box create-control-card" style={{ flex: 1, minWidth: 280, padding: 10 }}>
                 <div className="dg-kicker" style={{ marginBottom: 6 }}>📎 Fonte deste conteúdo (opcional)</div>
                 {inlineSrc ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#cfcfcf" }}>
@@ -667,8 +691,8 @@ export default function CriarPage() {
                   </div>
                 ) : (
                   <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
-                    <textarea value={srcInput} onChange={(e) => setSrcInput(e.target.value)} placeholder="cola o artigo ou uma URL…" className="dg-input" style={{ flex: 1, height: 44, resize: "vertical", fontSize: 12 }} />
-                    <button onClick={attachSourceText} disabled={srcBusy} style={{ fontSize: 12, background: "#21212a", color: "#cfcfcf", border: "1px solid #3b3b44", borderRadius: 7, padding: "6px 12px", cursor: "pointer" }}>{srcBusy ? "…" : "anexar"}</button>
+                    <textarea value={srcInput} onChange={(e) => setSrcInput(e.target.value)} placeholder="cola o artigo ou uma URL" className="dg-input" style={{ flex: 1, height: 44, resize: "vertical", fontSize: 12 }} />
+                    <button onClick={attachSourceText} disabled={srcBusy} style={{ fontSize: 12, background: "#21212a", color: "#cfcfcf", border: "1px solid #3b3b44", borderRadius: 7, padding: "6px 12px", cursor: "pointer" }}>{srcBusy ? "anexando" : "anexar"}</button>
                     <button onClick={() => srcFileRef.current?.click()} disabled={srcBusy} style={{ fontSize: 12, background: "#21212a", color: "#cfcfcf", border: "1px solid #3b3b44", borderRadius: 7, padding: "6px 12px", cursor: "pointer" }}>PDF</button>
                     <input ref={srcFileRef} type="file" accept="application/pdf" hidden onChange={(e) => attachSourcePdf(e.target.files)} />
                   </div>
@@ -677,13 +701,13 @@ export default function CriarPage() {
             </div>
 
             {/* PASSO GANCHO — trava a abertura ANTES do roteiro (opcional; pode pular) */}
-            <div className="dg-box" style={{ padding: 12, border: "1px solid " + (chosenHook ? "#6a5a1e" : "#2e2e36") }}>
+            <div className="dg-box create-hook-box" style={{ padding: 12, border: "1px solid " + (chosenHook ? "#6a5a1e" : "#2e2e36") }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <span className="dg-kicker">🎣 1º o gancho</span>
                 <span style={{ fontSize: 11.5, color: "#7c869c" }}>escolhe a abertura antes — o roteiro nasce comprometido com ela (a capa sai dela, sem distorcer)</span>
                 <span style={{ flex: 1 }} />
                 <button onClick={genHooks} disabled={hooksLoad || !content} className="dg-btn" style={{ fontSize: 13, opacity: (hooksLoad || !content) ? 0.6 : 1 }}>
-                  {hooksLoad ? "gerando..." : (chosenHook ? "↻ outros ganchos" : "✦ Gerar 5 ganchos")}
+                  {hooksLoad ? "gerando" : (chosenHook ? "↻ outros ganchos" : "✦ Gerar 5 ganchos")}
                 </button>
               </div>
 
@@ -736,9 +760,9 @@ export default function CriarPage() {
             {/* gerar */}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", borderTop: "1px solid #2e2e36", paddingTop: 14 }}>
               <button onClick={generateRoteiro} disabled={roteiroLoad || !content} className="dg-btn-primary" style={{ padding: "11px 26px", fontSize: 15, opacity: (roteiroLoad || !content) ? 0.6 : 1 }}>
-                {roteiroLoad ? "Escrevendo roteiro..." : (chosenHook ? "✍️ Gerar roteiro com este gancho" : "✍️ Gerar roteiro (IA escolhe o gancho)")}
+                {roteiroLoad ? "Escrevendo roteiro" : (chosenHook ? "✍️ Gerar roteiro com este gancho" : "✍️ Gerar roteiro (IA escolhe o gancho)")}
               </button>
-              <span style={{ fontSize: 12, color: "#5a6378" }} title="A qualidade está toda embutida: a IA ancora na marca + aprendizado, pensa o arco antes de escrever e se autolimpa sozinha. Sem caixinha pra marcar.">✓ qualidade embutida</span>
+              <span style={{ fontSize: 12, color: "#5a6378" }} title="A qualidade está toda embutida: a IA ancora na marca + aprendizado, pensa o arco antes de escrever e se autolimpa sozinha — sem caixinha pra marcar">✓ qualidade embutida</span>
               {savedAt && (carousel.cards.length > 0 || legenda || roteiro) && <span style={{ color: "#5a6378", fontSize: 12, marginLeft: "auto" }} title="rascunho salvo no navegador — sobrevive ao F5">💾 salvo automático</span>}
               {carousel.cards.length > 0 && (
                 <button onClick={() => setStage("carrossel")} className="dg-btn" style={{ marginLeft: savedAt ? 0 : "auto" }}>ir pro carrossel →</button>
@@ -748,23 +772,23 @@ export default function CriarPage() {
 
           {/* ETAPA 1 — o roteiro (texto), editável e aprovável antes de virar carrossel */}
           {roteiro && (
-            <div className="dg-panel" style={{ padding: 16, marginBottom: 24 }}>
+            <div className="studio-section studio-section--pad create-script">
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
                 <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: "#fff", letterSpacing: 1 }}>✍️ ROTEIRO</span>
-                <span style={{ fontSize: 12, color: "#9aa0b0" }}>edita à vontade — é a TUA escrita. Só vira carrossel quando você aprovar.</span>
+                <span style={{ fontSize: 12, color: "#9aa0b0" }}>edita à vontade — é a TUA escrita. Só vira carrossel quando você aprovar</span>
                 <span style={{ flex: 1 }} />
                 {voiceMsg && <span style={{ fontSize: 12, color: voiceMsg.startsWith("⭐") ? "#e8c860" : "#e0738c" }}>{voiceMsg}</span>}
                 <button onClick={markRoteiroVoice} title="Marca este roteiro como a TUA voz no ponto — a IA imita a cadência nas próximas"
                   style={{ fontSize: 12, background: "#241f0e", color: "#e8c860", border: "1px solid #6a5a1e", borderRadius: 7, padding: "6px 11px", cursor: "pointer", fontWeight: 600 }}>⭐ minha voz</button>
                 <button onClick={rejectRoteiro} title="Não curti — a IA aprende a NÃO escrever assim (evita esse tom/ângulo nas próximas)"
                   style={{ fontSize: 12, background: "transparent", color: "#9a8a90", border: "1px solid #3a2a32", borderRadius: 7, padding: "6px 11px", cursor: "pointer" }}>👎 não curti</button>
-                <button onClick={generateRoteiro} disabled={roteiroLoad} className="dg-btn" style={{ fontSize: 12, padding: "6px 12px" }}>{roteiroLoad ? "..." : "↻ reescrever"}</button>
+                <button onClick={generateRoteiro} disabled={roteiroLoad} className="dg-btn" style={{ fontSize: 12, padding: "6px 12px" }}>{roteiroLoad ? "reescrevendo" : "↻ reescrever"}</button>
               </div>
               <textarea ref={roteiroRef} defaultValue={roteiro} onChange={(e) => setRoteiro(e.target.value)} rows={14}
                 className="dg-input" style={{ width: "100%", fontSize: 15, lineHeight: 1.55, resize: "vertical", fontFamily: "inherit" }} />
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
                 <button onClick={generateCards} disabled={cardsLoad || !roteiro.trim()} className="dg-btn-primary" style={{ padding: "11px 22px", fontSize: 15, opacity: (cardsLoad || !roteiro.trim()) ? 0.6 : 1 }}>
-                  {cardsLoad ? "Montando carrossel..." : "🎨 Gerar carrossel deste roteiro"}
+                  {cardsLoad ? "Montando carrossel" : "🎨 Gerar carrossel deste roteiro"}
                 </button>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#cfcfcf", fontSize: 13 }}>
                   Estilo
@@ -814,7 +838,7 @@ export default function CriarPage() {
 
           {stage === "carrossel" && (<>
             {/* barra de ações do carrossel */}
-            <div className="dg-panel" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16, padding: "12px 16px" }}>
+            <div className="studio-section create-toolbar" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "12px 16px" }}>
               <button onClick={() => setStage("texto")} className="dg-btn" style={{ fontWeight: 600 }}>← voltar ao texto</button>
               <span style={{ width: 1, height: 22, background: "#2e2e36" }} />
               {carousel.cards.length > 0 && <button onClick={() => setSwipe(0)} className="dg-btn" title="Ver o carrossel deslizando, como no Instagram">👁️ Pré-visualizar</button>}
@@ -833,14 +857,14 @@ export default function CriarPage() {
             </div>
 
           {draftsOpen && (
-            <div className="dg-panel" style={{ padding: 14, marginBottom: 16 }}>
+            <div className="studio-section studio-section--pad create-drafts">
               <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
                 <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: "#fff", letterSpacing: 1 }}>MEUS RASCUNHOS</span>
                 <span style={{ flex: 1 }} />
                 <button onClick={() => setDraftsOpen(false)} className="dg-btn" style={{ padding: "5px 12px", fontSize: 12 }}>fechar</button>
               </div>
               {drafts.length === 0 ? (
-                <div style={{ fontSize: 13, color: "var(--dg-faint)" }}>Nenhum rascunho salvo ainda. Use <b style={{ color: "#cfcfcf" }}>💾 salvar rascunho</b> pra guardar o atual.</div>
+                <div style={{ fontSize: 13, color: "var(--dg-faint)" }}>Nenhum rascunho salvo ainda. Use <b style={{ color: "#cfcfcf" }}>💾 salvar rascunho</b> pra guardar o atual</div>
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
                   {drafts.map((d) => (
@@ -865,9 +889,9 @@ export default function CriarPage() {
           )}
 
           {carousel.cards.length === 0 && (
-            <div className="dg-panel" style={{ padding: 44, textAlign: "center", color: "#7c869c" }}>
+            <div className="studio-section studio-section--pad create-empty" style={{ textAlign: "center", color: "#7c869c" }}>
               <div className="dg-title" style={{ fontSize: 26, color: "#cfcfcf", marginBottom: 6 }}>NADA AQUI AINDA</div>
-              <div style={{ fontSize: 14, marginBottom: 20 }}>Cola um conteúdo acima e clica <b style={{ color: "#ef476f" }}>Gerar carrossel</b> — ou começa na mão.</div>
+              <div style={{ fontSize: 14, marginBottom: 20 }}>Cola um conteúdo acima e clica <b style={{ color: "#ef476f" }}>Gerar carrossel</b> — ou começa na mão</div>
               <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
                 <button className="dg-btn" onClick={addCard}>+ adicionar card manual</button>
                 <button className="dg-btn" onClick={() => setCarousel(SAMPLE)}>ver exemplo</button>
@@ -909,12 +933,12 @@ export default function CriarPage() {
               e.currentTarget.setPointerCapture(e.pointerId); apply(e);
             };
             const handle = (key: string, x: number, y: number, label: string, color: string) => (
-              <div data-drag={key} style={{ position: "absolute", left: `${x * 100}%`, top: `${y * 100}%`, transform: "translate(-50%,-50%)", background: color, color: "#fff", fontSize: 9.5, fontWeight: 700, padding: "2px 6px", borderRadius: 5, border: "1.5px solid #fff", cursor: "move", whiteSpace: "nowrap", boxShadow: "0 1px 6px rgba(0,0,0,.6)", touchAction: "none" }}>{label}</div>
+              <div key={key} data-drag={key} style={{ position: "absolute", left: `${x * 100}%`, top: `${y * 100}%`, transform: "translate(-50%,-50%)", background: color, color: "#fff", fontSize: 9.5, fontWeight: 700, padding: "2px 6px", borderRadius: 5, border: "1.5px solid #fff", cursor: "move", whiteSpace: "nowrap", boxShadow: "0 1px 6px rgba(0,0,0,.6)", touchAction: "none" }}>{label}</div>
             );
             return (
-            <div style={{ display: "flex", gap: 22, marginBottom: 26, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div className="create-editor-stage">
               <div className="dg-canvas">
-                <div className="dg-panel" style={{ padding: 14 }}>
+                <div className="studio-section create-preview-card" style={{ padding: 14 }}>
                 <div
                   ref={previewRef}
                   onPointerDown={onDown}
@@ -957,7 +981,7 @@ export default function CriarPage() {
           )}
 
           {legenda && (
-            <div style={{ marginTop: 24, background: "#19191d", border: "1px solid #2e2e36", borderRadius: 12, padding: 16 }}>
+            <div className="studio-section studio-section--pad create-caption">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontWeight: 700 }}>📝 Legenda do post</span>
                 <button onClick={() => navigator.clipboard.writeText(legenda)} style={{ fontSize: 13, background: "#21212a", color: "#f5f5f5", border: "1px solid #2e2e36", borderRadius: 6, padding: "5px 12px", cursor: "pointer" }}>copiar</button>
@@ -996,6 +1020,6 @@ export default function CriarPage() {
               <button onClick={() => setSwipe(null)} style={{ position: "absolute", top: 18, right: 22, background: "transparent", border: "1px solid var(--dg-line)", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 14 }}>✕ fechar</button>
             </div>
           )}
-        </>
+        </div>
   );
 }

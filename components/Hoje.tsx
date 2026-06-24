@@ -4,6 +4,62 @@ import { useEffect, useState } from "react";
 import type { Post } from "@/lib/types";
 import { computeDose, sequenceAlerts, REG_MAP, type Registro } from "@/lib/vitals";
 
+function ActionIcon({ name }: { name: "pen" | "plus" | "grid" | "refresh" | "wave" | "calendar" | "hook" }) {
+  const c = { width: 19, height: 19, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  switch (name) {
+    case "pen": return <svg {...c}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>;
+    case "plus": return <svg {...c}><path d="M12 5v14M5 12h14" /></svg>;
+    case "grid": return <svg {...c}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 10h16M10 4v16" /></svg>;
+    case "refresh": return <svg {...c}><path d="M20 12a8 8 0 1 1-2.34-5.66" /><path d="M20 4v6h-6" /></svg>;
+    case "wave": return <svg {...c}><path d="M4 12h2M8 8v8M12 5v14M16 9v6M20 12h-2" /></svg>;
+    case "calendar": return <svg {...c}><rect x="3" y="4.5" width="18" height="16.5" rx="2" /><path d="M3 9h18M8 2.5v4M16 2.5v4" /></svg>;
+    case "hook": return <svg {...c}><path d="M8 5a4 4 0 0 1 8 0v8a5 5 0 0 1-10 0" /><path d="M12 3v10" /></svg>;
+  }
+}
+
+function Arrow() {
+  return <span className="hoje-arrow">→</span>;
+}
+
+function DraftMark() {
+  return (
+    <div className="hoje-draft-mark" aria-hidden="true">
+      <ActionIcon name="pen" />
+    </div>
+  );
+}
+
+function RhythmOrb() {
+  return (
+    <div className="hoje-rhythm-orb" aria-hidden="true">
+      <ActionIcon name="wave" />
+    </div>
+  );
+}
+
+function MiniTrend() {
+  return (
+    <svg className="hoje-mini-trend" viewBox="0 0 260 96" aria-hidden="true">
+      <defs>
+        <linearGradient id="trendLine" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0%" stopColor="#ef476f" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#ff6f99" />
+        </linearGradient>
+        <linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#ef476f" stopOpacity="0.28" />
+          <stop offset="100%" stopColor="#ef476f" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d="M8 82 L38 70 L72 72 L112 45 L154 43 L198 54 L246 14 L246 96 L8 96 Z" fill="url(#trendFill)" />
+      <path d="M8 82 L38 70 L72 72 L112 45 L154 43 L198 54 L246 14" fill="none" stroke="url(#trendLine)" strokeWidth="2.4" />
+      {[8, 38, 72, 112, 154, 198, 246].map((x, i) => {
+        const y = [82, 70, 72, 45, 43, 54, 14][i];
+        return <circle key={x} cx={x} cy={y} r={3.2} fill="#ff6f99" />;
+      })}
+    </svg>
+  );
+}
+
 export default function Hoje({ onNovo, onResume, onPede, onHook, onGoto, hasDraft, draftLabel }: {
   onNovo: () => void;
   onResume: () => void;
@@ -31,93 +87,96 @@ export default function Hoje({ onNovo, onResume, onPede, onHook, onGoto, hasDraf
   const ganchos = posts.filter((p) => p.savedHook && (p.stage === "ideia" || !p.stage));
   const agendados = posts.filter((p) => p.scheduledAt && p.scheduledAt >= hojeStr).sort((a, b) => (a.scheduledAt || "").localeCompare(b.scheduledAt || "")).slice(0, 5);
 
-  const card: React.CSSProperties = { padding: 18, marginBottom: 14 };
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, maxWidth: 920 }}>
-      {/* HERO */}
-      <div className="dg-panel" style={{ ...card, padding: 22 }}>
-        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 30, color: "#fff", letterSpacing: 1, lineHeight: 1 }}>O QUE VOCÊ VAI POSTAR HOJE?</div>
-        <div style={{ color: "#9aa0b0", fontSize: 14, margin: "8px 0 18px" }}>Começa do zero ou pega uma ideia que já te acendeu. A escrita sai na voz da marca.</div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={onNovo} className="dg-btn-primary" style={{ padding: "12px 24px", fontSize: 15 }}>✍️ Criar do zero</button>
-          <button onClick={() => onGoto("marca")} className="dg-btn" style={{ padding: "12px 20px" }}>✦ Ver pautas</button>
-          <button onClick={() => onGoto("quadro")} className="dg-btn" style={{ padding: "12px 20px" }}>▦ Abrir o Quadro</button>
+    <div className="hoje-stack">
+      <section className="dg-hero hoje-hero">
+        <div className="hoje-hero__media" aria-hidden="true">
+          <div className="hoje-hero__image" />
+          <div className="hoje-hero__blend" />
+          <div className="hoje-hero__mesh" />
         </div>
-      </div>
-
-      {/* DIRETRIZ DE HOJE (plano da semana) */}
-      {hojeReg && (
-        <div className="dg-box" style={{ ...card, borderLeft: `3px solid ${REG_MAP[hojeReg].color}` }}>
-          <div className="dg-kicker" style={{ marginBottom: 6 }}>📋 A diretriz de hoje</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 15, color: "#cfcfcf" }}>O plano pede <b style={{ color: REG_MAP[hojeReg].color }}>{REG_MAP[hojeReg].emoji} {REG_MAP[hojeReg].label}</b> — {REG_MAP[hojeReg].o_que}.</span>
-            <button onClick={() => onPede(hojeReg)} className="dg-btn-primary" style={{ fontSize: 13, padding: "8px 16px" }}>criar {REG_MAP[hojeReg].emoji} {REG_MAP[hojeReg].label} →</button>
+        <div className="hoje-hero__content">
+          <h2 className="hoje-hero-title">
+            <span>O QUE VOCÊ VAI</span>
+            <strong>POSTAR HOJE?</strong>
+          </h2>
+          <p>Começa do zero ou pega uma ideia que já te acendeu. A escrita sai na voz da marca</p>
+          <div className="hoje-actions">
+            <button onClick={onNovo} className="hoje-action hoje-action--primary" type="button"><ActionIcon name="pen" />Criar do zero <Arrow /></button>
+            <button onClick={() => onGoto("marca")} className="hoje-action" type="button"><ActionIcon name="plus" />Ver pautas</button>
+            <button onClick={() => onGoto("quadro")} className="hoje-action" type="button"><ActionIcon name="grid" />Abrir o Quadro</button>
           </div>
         </div>
-      )}
+      </section>
 
-      {/* CONTINUE DE ONDE PAROU */}
       {hasDraft && (
-        <div className="dg-box" style={{ ...card, borderLeft: "3px solid #ef476f" }}>
-          <div className="dg-kicker" style={{ marginBottom: 6 }}>↻ Continue de onde parou</div>
-          <div style={{ color: "#cfcfcf", fontSize: 13.5, lineHeight: 1.5, marginBottom: 12, maxHeight: 60, overflow: "hidden" }}>{draftLabel || "Você tem um rascunho em aberto."}</div>
-          <button onClick={onResume} className="dg-btn-primary" style={{ padding: "9px 18px", fontSize: 14 }}>abrir esse rascunho →</button>
-        </div>
+        <section className="hoje-card hoje-draft-card">
+          <div className="hoje-card-copy">
+            <div className="hoje-kicker"><ActionIcon name="refresh" />CONTINUE DE ONDE PAROU</div>
+            <p>{draftLabel || "Você tem um rascunho em aberto"}</p>
+            <button onClick={onResume} className="hoje-action hoje-action--ghost" type="button">Abrir esse rascunho <Arrow /></button>
+          </div>
+          <div className="hoje-draft-side">
+            <span>Retomar último rascunho</span>
+            <DraftMark />
+          </div>
+        </section>
       )}
 
-      {/* O RITMO PEDE (Dose) */}
-      <div className="dg-box" style={card}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
-          <span className="dg-kicker">🔥 O ritmo da marca</span>
-          <span style={{ fontSize: 11.5, color: "#7c869c" }}>publicados de {ym.slice(5)} · {dose.total} marcados</span>
-          <span style={{ flex: 1 }} />
-          <button onClick={() => onGoto("calendario")} className="dg-btn" style={{ fontSize: 11.5, padding: "4px 11px" }}>ver A Dose →</button>
-        </div>
-        {dose.pede ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 14, color: "#cfcfcf" }}>O ritmo pede <b style={{ color: REG_MAP[dose.pede].color }}>{REG_MAP[dose.pede].emoji} {REG_MAP[dose.pede].label}</b> — {REG_MAP[dose.pede].o_que}.</span>
-            <button onClick={() => onPede(dose.pede!)} className="dg-btn-primary" style={{ fontSize: 13, padding: "8px 16px" }}>criar {REG_MAP[dose.pede].emoji} {REG_MAP[dose.pede].label} →</button>
+      {hojeReg && (
+        <section className="hoje-card hoje-directive-card" style={{ ["--today-color" as string]: REG_MAP[hojeReg].color }}>
+          <div>
+            <div className="hoje-kicker">A DIRETRIZ DE HOJE</div>
+            <p>O plano pede <b>{REG_MAP[hojeReg].emoji} {REG_MAP[hojeReg].label}</b> — {REG_MAP[hojeReg].o_que}</p>
           </div>
-        ) : dose.total >= 3 ? (
-          <div style={{ fontSize: 13.5, color: "#5e8a5e" }}>✓ ritmo equilibrado este mês.</div>
-        ) : (
-          <div style={{ fontSize: 13, color: "#7c869c" }}>Marca o registro dos teus posts publicados (no Quadro) pra eu ler o ritmo.</div>
-        )}
-        {seq.length > 0 && (
-          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
-            {seq.map((a, i) => <div key={i} style={{ fontSize: 12.5, color: "#cfcfcf" }}><span style={{ color: "#e8a020" }}>⚠</span> {a.msg}</div>)}
-          </div>
-        )}
-      </div>
+          <button onClick={() => onPede(hojeReg)} className="hoje-action hoje-action--ghost" type="button">Criar {REG_MAP[hojeReg].label} <Arrow /></button>
+        </section>
+      )}
 
-      {/* GANCHOS SALVOS */}
+      <section className="hoje-card hoje-rhythm-card">
+        <RhythmOrb />
+        <div className="hoje-rhythm-copy">
+          <div className="hoje-kicker">O RITMO DA MARCA <span>publicados de {ym.slice(5)} · {dose.total} marcados</span></div>
+          {dose.pede ? (
+            <p>O ritmo pede <b style={{ color: REG_MAP[dose.pede].color }}>{REG_MAP[dose.pede].emoji} {REG_MAP[dose.pede].label}</b> — {REG_MAP[dose.pede].o_que}</p>
+          ) : dose.total >= 3 ? (
+            <p>Ritmo equilibrado este mês</p>
+          ) : (
+            <p>Marca o registro dos teus posts publicados (no Quadro) pra eu ler o ritmo</p>
+          )}
+          {seq.length > 0 && <div className="hoje-alerts">{seq.map((a, i) => <span key={i}>{a.msg}</span>)}</div>}
+        </div>
+        <button onClick={() => onGoto("calendario")} className="hoje-action hoje-action--ghost hoje-dose-btn" type="button">Ver a Dose <Arrow /></button>
+        <MiniTrend />
+      </section>
+
       {ganchos.length > 0 && (
-        <div className="dg-box" style={card}>
-          <div className="dg-kicker" style={{ marginBottom: 10 }}>🎣 Ganchos salvos ({ganchos.length}) — prontos pra virar carrossel</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <section className="hoje-card hoje-list-card">
+          <div className="hoje-kicker"><ActionIcon name="hook" />Ganchos salvos ({ganchos.length}) — prontos pra virar carrossel</div>
+          <div className="hoje-list">
             {ganchos.map((p) => (
-              <div key={p.id} style={{ background: "#101728", border: "1px solid #2a3552", borderRadius: 8, padding: "10px 12px", display: "flex", gap: 10, alignItems: "center" }}>
-                <div style={{ flex: 1, fontSize: 13.5, color: "#fff", fontWeight: 600, lineHeight: 1.4 }}>{(p.savedHook?.capa || p.tema || "").replace(/\*\*/g, "")}</div>
-                <button onClick={() => onHook(p)} className="dg-btn-primary" style={{ fontSize: 12.5, padding: "7px 14px", whiteSpace: "nowrap" }}>virar carrossel →</button>
+              <div key={p.id} className="hoje-list-row">
+                <div>{(p.savedHook?.capa || p.tema || "").replace(/\*\*/g, "")}</div>
+                <button onClick={() => onHook(p)} className="hoje-action hoje-action--mini" type="button">Virar carrossel <Arrow /></button>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* PRÓXIMOS AGENDADOS */}
       {agendados.length > 0 && (
-        <div className="dg-box" style={card}>
-          <div className="dg-kicker" style={{ marginBottom: 10 }}>◷ Próximos agendados</div>
-          {agendados.map((p) => (
-            <div key={p.id} style={{ display: "flex", gap: 12, alignItems: "center", padding: "5px 0", fontSize: 13.5, color: "#cfcfcf" }}>
-              <span style={{ color: "#5b8def", fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, width: 54 }}>{p.scheduledAt?.slice(5)}</span>
-              {p.registro && <span title={REG_MAP[p.registro].label}>{REG_MAP[p.registro].emoji}</span>}
-              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(p.carousel?.cards?.[0]?.headline || p.tema || "").replace(/\*\*/g, "")}</span>
-            </div>
-          ))}
-        </div>
+        <section className="hoje-card hoje-list-card">
+          <div className="hoje-kicker"><ActionIcon name="calendar" />Próximos agendados</div>
+          <div className="hoje-list">
+            {agendados.map((p) => (
+              <div key={p.id} className="hoje-list-row">
+                <span className="hoje-date">{p.scheduledAt?.slice(5)}</span>
+                {p.registro && <span title={REG_MAP[p.registro].label}>{REG_MAP[p.registro].emoji}</span>}
+                <div>{(p.carousel?.cards?.[0]?.headline || p.tema || "").replace(/\*\*/g, "")}</div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );

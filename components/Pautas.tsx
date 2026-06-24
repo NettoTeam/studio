@@ -12,10 +12,13 @@ export default function Pautas({ onUse, onIdea }: { onUse: (tema: string, angulo
 
   // persiste as pautas geradas — não se perdem ao trocar de aba e voltar
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem("dg_pautas");
-      if (raw) { const d = JSON.parse(raw); setPautas(d.pautas || []); setOrigs(d.origs || {}); }
-    } catch {}
+    const id = window.setTimeout(() => {
+      try {
+        const raw = sessionStorage.getItem("dg_pautas");
+        if (raw) { const d = JSON.parse(raw); setPautas(d.pautas || []); setOrigs(d.origs || {}); }
+      } catch {}
+    }, 0);
+    return () => window.clearTimeout(id);
   }, []);
   useEffect(() => {
     try { sessionStorage.setItem("dg_pautas", JSON.stringify({ pautas, origs })); } catch {}
@@ -58,23 +61,23 @@ export default function Pautas({ onUse, onIdea }: { onUse: (tema: string, angulo
 
   return (
     <div>
-      <div className="dg-panel" style={{ padding: 18, marginBottom: 18, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-        <div style={{ color: "var(--dg-grey)", fontSize: 14, flex: 1, minWidth: 280 }}>
+      <div className="studio-row studio-row--wrap" style={{ marginBottom: 16 }}>
+        <div className="studio-muted" style={{ flex: 1, minWidth: 280 }}>
           A IA sugere pautas novas com base no que dá certo pra você + no que já postou (sem repetir). Pode <b style={{ color: "var(--dg-text)" }}>editar</b> antes de guardar — e ao guardar ou recusar, a pauta <b style={{ color: "var(--dg-text)" }}>sai da tela</b>.
         </div>
-        <button className="dg-btn-primary" onClick={gen} disabled={loading} style={{ padding: "10px 20px" }}>{loading ? "Pensando…" : "Sugerir pautas"}</button>
+        <button className="dg-btn-primary" onClick={gen} disabled={loading} style={{ padding: "10px 20px" }}>{loading ? "Pensando" : "Sugerir pautas"}</button>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {pautas.map((p) => (
-          <div key={p.id} className="dg-card" style={{ padding: 16 }}>
+          <div key={p.id} className="studio-section studio-section--pad">
             <textarea value={p.tema} onChange={(e) => setField(p.id, "tema", e.target.value)} rows={1}
-              style={{ width: "100%", background: "transparent", color: "var(--dg-white)", border: "1px solid transparent", borderRadius: 6, padding: "4px 6px", fontSize: 17, fontWeight: 700, marginBottom: 2, resize: "none", fontFamily: "inherit" }}
+              style={{ width: "100%", background: "transparent", color: "var(--dg-white)", border: "1px solid transparent", borderRadius: 6, padding: "4px 6px", fontSize: 17, fontWeight: 700, marginBottom: 2, resize: "none", fontFamily: "inherit", outline: "none" }}
               onFocus={(e) => (e.currentTarget.style.border = "1px solid var(--dg-line)")} onBlur={(e) => (e.currentTarget.style.border = "1px solid transparent")} />
             <textarea value={p.angulo} onChange={(e) => setField(p.id, "angulo", e.target.value)} rows={2}
-              style={{ width: "100%", background: "transparent", color: "var(--dg-text)", border: "1px solid transparent", borderRadius: 6, padding: "4px 6px", fontSize: 14, lineHeight: 1.5, marginBottom: p.pilar ? 6 : 10, resize: "vertical", fontFamily: "inherit" }}
+              style={{ width: "100%", background: "transparent", color: "var(--dg-text)", border: "1px solid transparent", borderRadius: 6, padding: "4px 6px", fontSize: 14, lineHeight: 1.5, marginBottom: p.pilar ? 6 : 10, resize: "vertical", fontFamily: "inherit", outline: "none" }}
               onFocus={(e) => (e.currentTarget.style.border = "1px solid var(--dg-line)")} onBlur={(e) => (e.currentTarget.style.border = "1px solid transparent")} />
             {p.pilar && <div style={{ fontSize: 11, color: "#9a8f6a", marginBottom: 12, paddingLeft: 6 }} title="pilar de marca de onde a pauta nasceu">💎 pilar: {p.pilar}</div>}
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div className="studio-row studio-row--wrap">
               <button className="dg-btn-primary" onClick={() => onUse(p.tema, p.angulo)} style={{ padding: "7px 14px", fontSize: 13 }}>criar agora</button>
               <button className="dg-btn" onClick={() => guardar(p)} style={{ padding: "7px 14px", fontSize: 13 }}>→ guardar em Ideias</button>
               <span style={{ flex: 1 }} />
@@ -82,7 +85,7 @@ export default function Pautas({ onUse, onIdea }: { onUse: (tema: string, angulo
             </div>
           </div>
         ))}
-        {!pautas.length && !loading && <div style={{ color: "var(--dg-faint)", padding: "20px 2px" }}>Clica em “Sugerir pautas” que a IA te entrega ideias pro próximo conteúdo. Conforme você guarda ou recusa, elas saem daqui.</div>}
+        {!pautas.length && !loading && <div className="studio-empty">Clique em Sugerir pautas para gerar novas ideias</div>}
       </div>
     </div>
   );
