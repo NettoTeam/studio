@@ -37,19 +37,19 @@ export const HOOKS: Framework[] = [
     id: "correlacao",
     name: "Correlação (melhor p/ técnico)",
     short: "parte de um tema conhecido e conecta ao assunto",
-    prompt: "GANCHO POR CORRELAÇÃO — comece por um tema/história ESPECÍFICO, real e relacionável, de FORA do fitness, e conecte ao assunto técnico. A ponte tem que ser CONCRETA: pessoa real, detalhe real (NUNCA uma 'mulher' vaga/inventada). PROIBIDO metáfora batida ('o corpo é como uma máquina/casa/jardim') e abrir com 'todo mundo sabe'. CRÍTICO — a correlação NÃO ACABA NO GANCHO: o card seguinte (contexto) tem que DESENVOLVER a história com detalhe concreto e fazer a PONTE EXPLÍCITA com o assunto (a leitora precisa entender QUEM/O QUE é e COMO conecta). NUNCA largue a história depois da capa nem pule direto pro ponto técnico — isso deixa os cards desconexos. Se não houver uma ponte concreta de verdade, use OUTRO tipo de gancho em vez de inventar uma história vaga.",
+    prompt: "GANCHO POR CORRELAÇÃO — comece por um tema/história ESPECÍFICO, real e relacionável, de FORA do fitness, e conecte ao assunto técnico. A ponte tem que ser CONCRETA: pessoa real, detalhe real, acontecimento real. NUNCA use 'o cara', 'uma mulher' ou personagem vago/inventado. PROIBIDO metáfora batida ('o corpo é como uma máquina/casa/jardim/carro/ponte') e abrir com 'todo mundo sabe'. CRÍTICO — a correlação NÃO ACABA NO GANCHO: o card seguinte (contexto) tem que DESENVOLVER a história com detalhe concreto e fazer a PONTE EXPLÍCITA com o assunto. A leitora precisa entender QUEM/O QUE é e COMO conecta. NUNCA largue a história depois da capa nem pule direto pro ponto técnico. Se não houver uma ponte concreta de verdade, use OUTRO tipo de gancho em vez de inventar uma história vaga.",
   },
   {
     id: "temporal",
     name: "Temporal (era uma vez)",
     short: "posiciona no tempo, liga o modo história",
-    prompt: "GANCHO TEMPORAL — ancore numa marca de tempo que dá a sensação implícita de 'era uma vez' (ex: 'Há 6 meses, a Marina treinava todo dia e o bumbum não mudava nada...'). Liga o modo história e baixa a defesa da leitora. Bom pra origem, transformação, antes-e-depois honesto.",
+    prompt: "GANCHO TEMPORAL — ancore numa marca de tempo que dá a sensação implícita de 'era uma vez' (ex: 'Em 1900, nasceu o homem que...' ou 'Aos 13, 14 anos, teu corpo foi banhado em testosterona pela primeira vez'). Liga o modo história e baixa a defesa da leitora. Bom pra origem, transformação, descoberta e antes-e-depois honesto.",
   },
   {
     id: "pergunta",
     name: "Pergunta estranha / loop",
     short: "pergunta que só resolve nos slides",
-    prompt: "GANCHO PERGUNTA ESTRANHA — abra com uma pergunta ESPECÍFICA, concreta e meio estranha que a leitora NÃO consegue responder de cara e que abre uma lacuna que só os slides fecham. REGRA DE OURO: a pergunta NÃO pode ENTREGAR a resposta nem a tese. Se ela já insinua a lição/veredito, virou pergunta RETÓRICA de coach ('por que você ainda acha que não consegue?', 'será que você...?', 'até quando você vai...?') — isso soa pregador e BOBO, fica proibido. Não é um 'gotcha', não é debate-trap, não é moral disfarçada de pergunta. É um MISTÉRIO honesto: um fato, número ou detalhe concreto que intriga e dá vontade de descobrir. Ex pro tema do glúteo — BOBO: 'por que você agacha há 2 anos e ainda acha que o problema é genética?' (entrega a tese). BOM: 'quantas das suas 4 séries de agachamento realmente chegaram perto do músculo que você quer crescer?' (abre loop, esconde a resposta). Inesperada e concreta, nunca genérica.",
+    prompt: "GANCHO PERGUNTA ESTRANHA — abra com uma pergunta ESPECÍFICA, concreta e meio estranha que a leitora NÃO consegue responder de cara e que abre uma lacuna que só os slides fecham. REGRA DE OURO: a pergunta NÃO pode ENTREGAR a resposta nem a tese. Se ela já insinua a lição/veredito, virou pergunta RETÓRICA de coach ('por que você ainda acha que não consegue?', 'será que você...?', 'até quando você vai...?') — isso soa pregador e fica proibido. Não é um 'gotcha', não é debate-trap, não é moral disfarçada de pergunta. É um MISTÉRIO honesto: um fato, número ou detalhe concreto que intriga. Ex BOBO: 'por que tua voz engrossou aos 14 e tu segue achando que nasceu fraco?' (entrega a tese). Ex BOM: 'quanto músculo teu corpo construiu sozinho, sem tu mexer um dedo, antes dos 15 anos?' (abre loop, esconde a resposta). Inesperada e concreta, nunca genérica.",
   },
 ];
 

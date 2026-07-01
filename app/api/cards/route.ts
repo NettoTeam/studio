@@ -4,12 +4,71 @@ import { CARDS_SYSTEM, CARDS_SYSTEM_L2, CARDS_SYSTEM_L3, CARDS_SYSTEM_L4, CARDS_
 import { intentLabel } from "@/lib/frameworks";
 import { textOf } from "@/lib/llm";
 import { sentimentMenu, resolveImage, coverPhoto, imagesForCategory, sentimentKeys } from "@/lib/catalog";
-import type { Carousel } from "@/lib/types";
+import { cleanCaption, cleanCarousel, cleanGeneratedText, GENERATION_RULES } from "@/lib/generation-rules";
+import type { Card, Carousel } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 // Diagramador: Sonnet 4.6 (mais esperto nas escolhas de capa/layout/foto/destaque).
 const MODEL = process.env.ANTHROPIC_CARDS_MODEL || "claude-sonnet-4-6";
+
+const STYLE_LAYOUTS: Record<string, Card["layout"][]> = {
+  layout2: ["l2-capa", "l2-dor-dir", "l2-dor-esq", "l2-dor-dir", "l2-emocional", "l2-virada", "l2-cta"],
+  layout3: ["l3-educacional", "l3-capa", "l3-prova", "l3-historia", "l3-antes-depois"],
+  layout4: ["l4-capa", "l4-split", "l4-split", "l4-split", "l4-horizontal", "l4-faixa", "l4-faixa", "l4-final"],
+  layout5: ["l5-capa", "l5-split", "l5-caixa", "l5-texto", "l5-texto", "l5-solucao", "l3-antes-depois", "l5-galeria"],
+  layout6: ["l6-capa", "l6-historia", "l2-dor-esq", "l6-manifesto", "l6-lifestyle", "l6-fecho"],
+  layout7: ["l7-capa", "l7-problema", "l7-ciencia", "l7-problema", "l7-ciencia", "l7-prova", "l7-virada", "l7-prova", "l7-cta"],
+  layout8: ["l8-split", "l8-split", "l8-split", "l8-ruptura", "l8-cta"],
+  layout9: ["l9-capa", "l9-intro", "l9-conteudo", "l9-conteudo", "l9-conteudo", "l9-final"],
+  layout10: ["l10-capa", "l10-texto", "l10-texto", "l10-texto", "l10-texto", "l10-regra", "l10-resumo", "l10-cta"],
+};
+
+function clampCards(n?: number) {
+  const x = Number.isFinite(n) ? Math.round(n!) : 8;
+  return Math.min(12, Math.max(3, x));
+}
+
+function adaptLayouts(base: Card["layout"][], n: number): Card["layout"][] {
+  if (!base.length) return [];
+  if (n <= base.length) {
+    const mids = base.slice(1, -1);
+    const midCount = Math.max(0, n - 2);
+    const picked = midCount === 0
+      ? []
+      : midCount === 1
+      ? [mids[Math.floor(mids.length / 2)] || base[1]]
+      : Array.from({ length: midCount }, (_, i) => mids[Math.round((i * (mids.length - 1)) / (midCount - 1))] || mids[0]);
+    return [base[0], ...picked, base[base.length - 1]];
+  }
+  const out = [...base];
+  const mids = base.slice(1, -1);
+  let i = 0;
+  while (out.length < n) out.splice(out.length - 1, 0, mids[i++ % mids.length] || base[1] || base[0]);
+  return out;
+}
+
+function pickEvenCards(cards: Card[], n: number): Card[] {
+  if (cards.length <= n) return cards;
+  if (n === 1) return [cards[0]];
+  return Array.from({ length: n }, (_, i) => cards[Math.round((i * (cards.length - 1)) / (n - 1))]);
+}
+
+function styleInstruction(style: string | undefined, n: number): { text: string; layouts: Card["layout"][] } {
+  const layouts = style ? adaptLayouts(STYLE_LAYOUTS[style] || [], n) : [];
+  const seq = layouts.length ? `\nSEQUENCIA DE LAYOUTS OBRIGATORIA (${n} cards): ${layouts.join(" → ")}.` : "";
+  const count = `QUANTIDADE OBRIGATORIA: gere EXATAMENTE ${n} cards. Nem mais, nem menos. O campo "Nº de cards" do usuario manda mais que qualquer arco de layout.`;
+  if (style === "layout2") return { layouts, text: `${count}${seq}\nEstilo Layout 2: editorial premium, minimalista, alto contraste. Adapte o arco para ${n} cards: capa, dores/erro principal, impacto/virada e CTA conforme couber.` };
+  if (style === "layout3") return { layouts, text: `${count}${seq}\nEstilo Layout 3: storytelling/caso, clima de reportagem premium. Adapte abertura, caso/prova, desenvolvimento e antes/depois conforme couber.` };
+  if (style === "layout4") return { layouts, text: `${count}${seq}\nEstilo Layout 4: revista premium de negocios, titulos fortes, foto editorial e espaco negativo.` };
+  if (style === "layout5") return { layouts, text: `${count}${seq}\nEstilo Layout 5: editorial minimalista premium, uma mensagem por slide, muito respiro.` };
+  if (style === "layout6") return { layouts, text: `${count}${seq}\nEstilo Layout 6: manifesto fitness premium, conviccao, fotos escuras e contraste alto.` };
+  if (style === "layout7") return { layouts, text: `${count}${seq}\nEstilo Layout 7: cientifico/autoridade, visual de relatorio premium e linguagem clara.` };
+  if (style === "layout8") return { layouts, text: `${count}${seq}\nEstilo Layout 8: 80/20 lifestyle premium, fotos e numeros grandes, pouquissimo texto.` };
+  if (style === "layout9") return { layouts, text: `${count}${seq}\nEstilo Layout 9: editorial minimalista preto/cinza, hierarquia agressiva e muito vazio.` };
+  if (style === "layout10") return { layouts, text: `${count}${seq}\nEstilo Layout 10: vinho premium, serifada, dourado e regra 70/30 de espaco vazio.` };
+  return { layouts, text: `${count}\nUse layouts do Layout 1 com variedade coerente e preserve o texto aprovado.` };
+}
 
 export async function POST(req: Request) {
   const key = process.env.ANTHROPIC_API_KEY;
@@ -18,16 +77,17 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { roteiro?: string; nCards?: number; caption?: boolean; registro?: string; hook?: string; emotions?: string[]; cover?: string; style?: string };
   const roteiro = (body.roteiro || "").trim();
   if (!roteiro) return Response.json({ error: "Manda o roteiro." }, { status: 400 });
-  const isL2 = body.style === "layout2"; // arco editorial de 7 cards (Layout 2)
-  const isL3 = body.style === "layout3"; // arco de storytelling de 5 cards (Layout 3)
-  const isL4 = body.style === "layout4"; // revista de negócios, 8 cards (Layout 4)
-  const isL5 = body.style === "layout5"; // editorial minimalista, 8 cards (Layout 5)
-  const isL6 = body.style === "layout6"; // manifesto, 6 cards (Layout 6)
-  const isL7 = body.style === "layout7"; // científico/autoridade, 9 cards (Layout 7)
-  const isL8 = body.style === "layout8"; // 80/20 lifestyle, 5 cards (Layout 8)
-  const isL9 = body.style === "layout9"; // editorial minimalista, 6 cards (Layout 9)
-  const isL10 = body.style === "layout10"; // editorial vinho premium, 8 cards (Layout 10)
-  const hasArc = !!body.style && body.style !== "layout1"; // qualquer estilo de arco fixo
+  const desiredCards = clampCards(body.nCards);
+  const isL2 = body.style === "layout2"; // editorial premium
+  const isL3 = body.style === "layout3"; // storytelling
+  const isL4 = body.style === "layout4"; // revista de negócios
+  const isL5 = body.style === "layout5"; // editorial minimalista
+  const isL6 = body.style === "layout6"; // manifesto
+  const isL7 = body.style === "layout7"; // científico/autoridade
+  const isL8 = body.style === "layout8"; // 80/20 lifestyle
+  const isL9 = body.style === "layout9"; // editorial minimalista
+  const isL10 = body.style === "layout10"; // editorial vinho premium
+  const hasArc = !!body.style && body.style !== "layout1"; // estilos com sequência própria adaptável
 
   const lockedCover = (body.cover || "").trim().slice(0, 200);
   const intent = intentLabel(body.registro, body.hook, body.emotions);
@@ -41,33 +101,34 @@ export async function POST(req: Request) {
   const { getGoldSlices } = await import("@/lib/store");
   const [menu, slices] = await Promise.all([sentimentMenu(), getGoldSlices()]);
   const libBlock = `\n\nSENTIMENTOS DISPONÍVEIS (imageSentiment): ${menu}`;
+  const styleGuide = styleInstruction(body.style, desiredCards);
   // DIAGRAMAÇÕES QUE VOCÊ APROVOU — mostra o RITMO de layout que você curte (combate o "fatiado no automático")
-  const sliceBlock = slices.length && !hasArc // só o Layout 1 usa os ritmos aprovados; os demais têm arco fixo
+  const sliceBlock = slices.length && !hasArc // só o Layout 1 usa os ritmos aprovados; os demais usam sequência adaptável
     ? `\n\nRITMOS DE DIAGRAMAÇÃO QUE VOCÊ APROVOU (siga ESTE tipo de variedade e ritmo de layout — capa que soca, verdade curta em quote, dado em data; NUNCA repita o mesmo layout em sequência). NÃO copie o tema, copie o RITMO:\n${slices.slice(0, 4).map((s) => `• ${s.pattern}`).join("\n")}`
     : "";
   const captionBlock = body.caption
-    ? `\n\nINCLUA também no JSON um campo "legenda" (string): a legenda do post pro Instagram na voz do Cândido — a partir do roteiro, gancho na 1ª linha, 2-4 linhas, cta, e 8-12 hashtags.`
+    ? `\n\nINCLUA também no JSON um campo "legenda" (string): a legenda do post pro Instagram na voz do Cândido — a partir do roteiro, gancho na 1ª linha, 2-4 linhas, CTA e no máximo 5 hashtags. Escolha as hashtags com maior chance de engajamento para público feminino fitness, treino, glúteo, evolução e consultoria.`
     : "";
 
   const userMsg = isL2
-    ? `Diagrame o ROTEIRO abaixo no LAYOUT 2 — arco editorial de 7 cards: capa → PROBLEMA 01 → PROBLEMA 02 → PROBLEMA 03 → impacto emocional → virada → CTA. PRESERVE as palavras do Cândido; distribua o conteúdo nos 7 beats, escolha imageSentiment e marque os destaques (**rosa** e ==caixa==). Os 7 layouts são exatamente: l2-capa, l2-dor-dir, l2-dor-esq, l2-dor-dir, l2-emocional, l2-virada, l2-cta.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
+    ? `${GENERATION_RULES}\n\n${styleGuide.text}\nPRESERVE as palavras do Cândido; escolha imageSentiment e marque os destaques (**rosa** e ==caixa==).${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
     : isL3
-    ? `Diagrame o ROTEIRO abaixo no LAYOUT 3 — storytelling de caso, 5 cards: capa educacional (abertura) → apresentação do caso → prova social → desenvolvimento (só texto) → antes e depois. PRESERVE as palavras do Cândido; distribua a história nos 5 beats, narrativa de revista premium, e marque o destaque em **rosa** com parcimônia. Os 5 layouts são exatamente, nesta ordem: l3-educacional, l3-capa, l3-prova, l3-historia, l3-antes-depois.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
+    ? `${GENERATION_RULES}\n\n${styleGuide.text}\nPRESERVE as palavras do Cândido; distribua a história com narrativa premium e marque o destaque em **rosa** com parcimônia.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
     : isL4
-    ? `Diagrame o ROTEIRO abaixo no LAYOUT 4 — revista premium de negócios, 8 cards: capa → 3 argumentos (split) → destaque horizontal → 2 de autoridade (faixa) → CTA final. PRESERVE as palavras do Cândido; escolha imageSentiment pra todos e marque o destaque (**rosa**/==caixa==). Os 8 layouts, nesta ordem: l4-capa, l4-split, l4-split, l4-split, l4-horizontal, l4-faixa, l4-faixa, l4-final.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
+    ? `${GENERATION_RULES}\n\n${styleGuide.text}\nPRESERVE as palavras do Cândido; escolha imageSentiment e marque o destaque (**rosa**/==caixa==).${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
     : isL5
-    ? `Diagrame o ROTEIRO abaixo no LAYOUT 5 — editorial minimalista premium, 8 cards: capa → argumento → impacto → 2 respiros (só texto) → solução → antes e depois → galeria. Minimalista, poucas palavras por slide. Os 8 layouts, nesta ordem: l5-capa, l5-split, l5-caixa, l5-texto, l5-texto, l5-solucao, l3-antes-depois, l5-galeria.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
+    ? `${GENERATION_RULES}\n\n${styleGuide.text}\nPRESERVE as palavras do Cândido; use poucas palavras por slide e muito respiro.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
     : isL6
-    ? `Diagrame o ROTEIRO abaixo no LAYOUT 6 — manifesto fitness premium, 6 cards: capa manifesto → storytelling pessoal → divisão 50/50 → manifesto (só texto) → lifestyle → fecho. Títulos enormes, storytelling, contraste alto. Os 6 layouts, nesta ordem: l6-capa, l6-historia, l2-dor-esq, l6-manifesto, l6-lifestyle, l6-fecho.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
+    ? `${GENERATION_RULES}\n\n${styleGuide.text}\nPRESERVE as palavras do Cândido; títulos grandes, storytelling e contraste alto.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
     : isL7
-    ? `Diagrame o ROTEIRO abaixo no LAYOUT 7 — científico/autoridade, 9 cards: capa → problema → ciência → problema → ciência → prova → virada → prova → CTA. Use bullets no problema e referência (source) na ciência. Os 9 layouts, nesta ordem: l7-capa, l7-problema, l7-ciencia, l7-problema, l7-ciencia, l7-prova, l7-virada, l7-prova, l7-cta.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
+    ? `${GENERATION_RULES}\n\n${styleGuide.text}\nPRESERVE as palavras do Cândido; use bullets quando ajudar e ciência como clareza, não jargão.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
     : isL8
-    ? `Diagrame o ROTEIRO abaixo no LAYOUT 8 — 80/20 lifestyle, 5 cards: 3 comparações (split com números, ex 80%/20%) → ruptura (frase central) → CTA (pergunta gigante). Pouquíssimo texto. Os 5 layouts, nesta ordem: l8-split, l8-split, l8-split, l8-ruptura, l8-cta.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
+    ? `${GENERATION_RULES}\n\n${styleGuide.text}\nPRESERVE as palavras do Cândido; pouquíssimo texto, fotos fortes e números quando couber.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
     : isL9
-    ? `Diagrame o ROTEIRO abaixo no LAYOUT 9 — editorial minimalista preto/cinza, 6 cards: capa (título gigante) → intro (palavra-gatilho) → 3 pontos/ferramentas → oferta/CTA. Hierarquia extrema, muito respiro. Os 6 layouts, nesta ordem: l9-capa, l9-intro, l9-conteudo, l9-conteudo, l9-conteudo, l9-final.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
+    ? `${GENERATION_RULES}\n\n${styleGuide.text}\nPRESERVE as palavras do Cândido; hierarquia extrema e muito respiro.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
     : isL10
-    ? `Diagrame o ROTEIRO abaixo no LAYOUT 10 — editorial vinho premium (serifada + dourado), 8 cards: capa → direção (2, esquerda/direita) → método (2, esquerda/direita) → regra (caixa dourada) → resumo (checklist) → CTA. Elegância, 70% espaço vazio. Os 8 layouts, nesta ordem: l10-capa, l10-texto, l10-texto, l10-texto, l10-texto, l10-regra, l10-resumo, l10-cta.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
-    : `Fatie o ROTEIRO abaixo em ${body.nCards || "8"} cards (aproximado — use bom senso, o número de cards segue o texto). PRESERVE as palavras do Cândido; só distribua, formate, escolha layout/imagem e marque o destaque em rosa.${intentBlock}${sliceBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`;
+    ? `${GENERATION_RULES}\n\n${styleGuide.text}\nPRESERVE as palavras do Cândido; elegância, 70% espaço vazio e CTA limpo.${intentBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`
+    : `${GENERATION_RULES}\n\n${styleGuide.text}\nPRESERVE as palavras do Cândido; só distribua, formate, escolha layout/imagem e marque o destaque em rosa.${intentBlock}${sliceBlock}${libBlock}${captionBlock}\n\nROTEIRO APROVADO:\n${roteiro}`;
 
   // tenta extrair + reparar + parsear o JSON; retorna null se falhar
   function tryParse(text: string): (Carousel & { legenda?: string }) | null {
@@ -90,25 +151,37 @@ export async function POST(req: Request) {
     let usage: Anthropic.Usage | undefined;
     // SEM extended thinking: o "planeje antes de cortar" mora no CARDS_SYSTEM (ele planeja na própria escrita).
     // Thinking aqui deixava o fatiador mais lento que o roteiro e estourava o tempo do servidor. Saída direta = rápido.
-    for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
+    for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
+      const retryNote = attempt === 0
+        ? ""
+        : `\n\nATENÇÃO: a resposta anterior falhou (${lastErr}). Gere JSON ESTRITAMENTE VÁLIDO e com EXATAMENTE ${desiredCards} cards. Escape as aspas com \\\" , use \\n pra quebra de linha, sem vírgula sobrando, sem aspas curvas.`;
       const res = await anthropic.messages.create({
         model: MODEL,
         max_tokens: 8000,
         system: [{ type: "text", text: isL10 ? CARDS_SYSTEM_L10 : isL9 ? CARDS_SYSTEM_L9 : isL8 ? CARDS_SYSTEM_L8 : isL7 ? CARDS_SYSTEM_L7 : isL6 ? CARDS_SYSTEM_L6 : isL5 ? CARDS_SYSTEM_L5 : isL4 ? CARDS_SYSTEM_L4 : isL3 ? CARDS_SYSTEM_L3 : isL2 ? CARDS_SYSTEM_L2 : CARDS_SYSTEM, cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content: attempt === 0 ? userMsg : userMsg + "\n\nATENÇÃO: a resposta anterior veio quebrada. Gere JSON ESTRITAMENTE VÁLIDO — escape as aspas com \\\" , use \\n pra quebra de linha, sem vírgula sobrando, sem aspas curvas." }],
+        messages: [{ role: "user", content: userMsg + retryNote }],
       });
       usage = res.usage;
       parsed = tryParse(textOf(res));
-      if (!parsed) lastErr = "JSON inválido (tentativa " + (attempt + 1) + ")";
+      if (!parsed) {
+        lastErr = "JSON inválido na tentativa " + (attempt + 1);
+        continue;
+      }
+      const count = parsed.cards?.length || 0;
+      if (count < desiredCards) {
+        lastErr = `vieram ${count} cards, preciso de ${desiredCards}`;
+        parsed = null;
+      }
     }
     if (!parsed) throw new Error("Não consegui montar os cards (JSON do modelo veio quebrado). Tenta de novo. " + lastErr);
-    const carousel: Carousel = { tema: parsed.tema, cards: parsed.cards };
-    const legenda = parsed.legenda?.replace(/\*\*/g, "");
+    const fittedCards = pickEvenCards(parsed.cards || [], desiredCards).map((c, i) => styleGuide.layouts[i] ? { ...c, layout: styleGuide.layouts[i] } : c);
+    const carousel: Carousel = cleanCarousel({ tema: parsed.tema, cards: fittedCards });
+    const legenda = cleanCaption(parsed.legenda?.replace(/\*\*/g, ""));
 
     // CAPA TRAVADA: usa a frase verbatim no card cover (o cards não destila/distorce)
     if (lockedCover) {
       const cv = carousel.cards.find((c) => c.layout === "cover" || c.layout.endsWith("-capa")) || carousel.cards[0];
-      if (cv) cv.headline = lockedCover;
+      if (cv) cv.headline = cleanGeneratedText(lockedCover) || lockedCover;
     }
 
     const n = carousel.cards.length;

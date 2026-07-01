@@ -71,7 +71,7 @@ export default function Calendar({ onOpen, onPede }: { onOpen: (c: Carousel) => 
 
   return (
     <div className="studio-page">
-      <section className="studio-hero">
+      <section className="studio-hero calendar-hero">
         <div className="studio-hero__copy">
           <h2>Ritmo, dose e agenda no mesmo mapa</h2>
           <p>Visualize o mês, ajuste a cadência dos registros e reorganize conteúdos agendados com clareza</p>
@@ -79,10 +79,8 @@ export default function Calendar({ onOpen, onPede }: { onOpen: (c: Carousel) => 
         <div className="studio-hero__side calendar-register-legend" aria-label="Legenda dos registros">
           {REGISTROS.map((r) => (
             <div key={r.id} className="calendar-register-item" style={{ ["--reg-color" as string]: r.color }}>
-              <span className="calendar-register-emoji">{r.emoji}</span>
               <span className="calendar-register-copy">
-                <strong>{r.label}</strong>
-                <small>{r.o_que}</small>
+                <strong>{r.emoji} {r.label}</strong>
               </span>
             </div>
           ))}
@@ -194,7 +192,7 @@ export default function Calendar({ onOpen, onPede }: { onOpen: (c: Carousel) => 
                     <button key={r.id} onClick={() => setDay(dow, r.id)} title={r.label}
                       className={"week-reg-btn" + (on ? " is-on" : "")}
                       style={{ ["--reg-color" as string]: r.color }}>
-                      {r.emoji}{on ? " " + r.label.slice(0, 3) : ""}
+                      {r.emoji}
                     </button>
                   );
                 })}

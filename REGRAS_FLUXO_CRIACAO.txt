@@ -1,0 +1,913 @@
+REGRAS E BLOCOS DO FLUXO DE CRIACAO
+Atualizado em: 25/06/2026
+
+Este arquivo resume os blocos que entram no fluxo de criacao do app:
+- ganchos
+- roteiro
+- carrossel
+
+Ele cobre:
+- regras fixas de escrita
+- tom/registro
+- tipo de gancho
+- emocoes
+- ponte de correlacao
+- ganchos rejeitados
+- roteiros rejeitados
+- estruturas que funcionaram
+
+
+1. REGRAS FIXAS DE ESCRITA
+
+Valem para gancho, roteiro, cards e legenda.
+
+- NUNCA usar travessao, seja "—" ou "–"
+  Trocar por quebra de linha, virgula ou frase nova
+
+- NUNCA terminar frase com ponto final
+  A quebra de linha e o ritmo do texto
+
+- NUNCA usar a muleta de negar "falta de" alguma coisa
+  Exemplos proibidos de estrutura:
+  "nao e falta de esforco"
+  "nao e falta de disciplina"
+  "nao e falta de tempo"
+  "nao e falta disso ou daquilo"
+
+  Direcao correta:
+  explicar o problema direto pelo metodo, execucao, progressao, direcao, estrutura ou consistencia
+
+- NUNCA usar formula pronta "nao e X, e Y"
+  Isso soa gerado por IA e vira frase de efeito barata
+
+- Na legenda, usar no maximo 5 hashtags
+  As hashtags devem ser escolhidas para engajamento com publico feminino fitness:
+  treino
+  gluteo
+  evolucao
+  consultoria
+  hipertrofia
+  constancia
+  metodo
+
+- O backend tambem limpa automaticamente:
+  travessoes viram virgula
+  pontos finais no fim de linha sao removidos
+  frases do tipo "nao e falta de..." sao substituidas por uma formulacao sobre metodo
+  legendas ficam com no maximo 5 hashtags
+
+
+2. TOM / REGISTRO
+
+Cada post pode carregar um registro.
+O registro define a postura do post, nao apenas o estilo.
+A cadencia continua vindo dos exemplos marcados como "minha voz".
+
+
+2.1 Diagnostico
+
+ID interno: ferida
+Emoji: alvo
+Proporcao-alvo da marca: 30%
+
+Funcao:
+enxergar o problema que a leitora ainda nao viu
+validar a dor, nunca a desculpa
+
+Tom:
+o texto nao consola, diagnostica
+a leitora esta cansada de tentar e nao entender por que continua sem resultado
+ela nao precisa de mais motivacao
+ela precisa de alguem que enxergue o problema que ela ainda nao conseguiu enxergar
+
+Postura:
+calma
+firme
+segura
+madura
+direta
+
+Frases/ideias que combinam:
+"eu vejo isso todos os dias"
+"existe um motivo pra isso acontecer"
+"o problema nao e o que voce imagina"
+"voce nao esta sozinha nisso"
+
+Proibido:
+"voce consegue"
+"vai dar certo"
+"basta acreditar"
+"sua hora vai chegar"
+"confie no processo"
+
+Sensacao desejada:
+"era exatamente isso que estava acontecendo comigo"
+
+
+2.2 Confronto
+
+ID interno: porrada
+Emoji: fogo
+Proporcao-alvo da marca: 25%
+
+Funcao:
+nomear o vilao externo:
+mercado
+atalho
+promessa falsa
+informacao ruim
+metodo errado
+
+Tom:
+incômodo
+provocativo
+direto
+sem medo de discordar
+
+O confronto nao deve humilhar a leitora.
+A mira e a mentira que enganou a leitora.
+
+Frases/ideias que combinam:
+"estao mentindo pra voce"
+"ninguem te contou isso"
+"o mercado quer que voce acredite nisso"
+"e exatamente por isso que voce continua travada"
+
+Proibido:
+"voce e preguicosa"
+"a culpa e sua"
+"voce nao quer o suficiente"
+
+Sensacao desejada:
+"eu sabia que tinha alguma coisa errada"
+
+
+2.3 Dominio
+
+ID interno: dominio
+Emoji: coroa
+Proporcao-alvo da marca: 20%
+
+Funcao:
+demonstrar leitura, profundidade e experiencia
+autoridade percebida, nunca declarada
+
+Tom:
+seguro
+preciso
+cirurgico
+quase arrogante, mas nunca arrogante
+
+O que vem primeiro:
+observacao
+leitura de detalhe
+capacidade de enxergar o que outros profissionais ignoram
+
+Frases/ideias que combinam:
+"quando eu analiso uma aluna, observo isso primeiro"
+"quase ninguem percebe esse detalhe"
+"e aqui que a maioria dos profissionais erra"
+"o problema esta escondido num lugar que ninguem olha"
+"esse detalhe muda completamente o resultado"
+
+Proibido:
+"eu sou referencia"
+"eu sou especialista"
+"eu sou o melhor"
+"confia em mim"
+
+Sensacao desejada:
+"esse cara enxerga um nivel acima"
+
+
+2.4 Clareza Estrategica
+
+ID interno: ensino
+Emoji: cerebro
+Proporcao-alvo da marca: 15%
+
+Funcao:
+fazer a pessoa enxergar o mecanismo
+nao ensinar para parecer inteligente
+ensinar para gerar clareza
+
+Estrutura:
+diagnostico
+causa
+consequencia
+direcao
+
+Tom:
+simples
+objetivo
+pratico
+cirurgico
+
+Frases/ideias que combinam:
+"o erro esta aqui"
+"e por isso que acontece"
+"e por isso que nao funciona"
+"o problema real e esse"
+
+Proibido:
+"segundo os estudos"
+"a literatura demonstra"
+"metanalises mostram"
+
+A ciencia sustenta a mensagem, mas nao lidera a mensagem.
+
+Sensacao desejada:
+"agora tudo faz sentido"
+
+
+2.5 Convocacao
+
+ID interno: convocacao
+Emoji: espadas
+Proporcao-alvo da marca: 10%
+
+Funcao:
+chamar para assumir responsabilidade e uma identidade
+nao chamar apenas para comprar, seguir ou assistir
+
+O que vem primeiro:
+compromisso
+escolha
+padrao
+responsabilidade
+
+Tom:
+forte
+maduro
+seletivo
+responsavel
+
+Frases/ideias que combinam:
+"existe um preco"
+"existe uma escolha"
+"existe um padrao"
+"existe uma responsabilidade"
+
+Proibido:
+"ultimas vagas"
+"corre"
+"aproveita"
+"nao perca"
+
+Sensacao desejada:
+"eu preciso estar desse lado"
+
+
+2.6 Darkside
+
+ID interno: darkside
+Emoji: caveira
+Camada transversal
+Nao entra na conta da Dose mensal
+
+Funcao:
+adicionar postura de aco quando o conteudo precisa de mais dureza
+
+Regras:
+- confronto antes do conforto
+- comecar pela verdade inconveniente
+- falar como quem ja viu centenas ou milhares de casos
+- evitar emocao acucarada
+- usar clareza brutal
+
+Exemplo de direcao:
+"voce consome mais conteudo do que executa metodo e progressao"
+
+Sensacao desejada:
+"a verdade que eu precisava ouvir"
+
+
+2.7 Regra Global Da Marca
+
+Vale para todo post, com ou sem registro escolhido.
+
+Todo conteudo responde a duas perguntas:
+1. O que a audiencia acredita ser o problema?
+2. O que realmente e o problema?
+
+Exemplo:
+ela acredita que o gluteo nao cresce por genetica
+a realidade pode ser falta de sobrecarga suficiente, metodo, progressao ou execucao
+
+Funcao da marca:
+desmascarar a falsa explicacao
+revelar a causa real do problema
+
+
+3. TIPOS DE GANCHO
+
+O tipo de gancho define a forma do card 1 e da abertura.
+
+
+3.1 Gancho Por Correlacao
+
+ID: correlacao
+Nome no app: Correlação
+
+Funcao:
+partir de um tema conhecido fora do fitness e conectar com o assunto tecnico
+
+Obrigatorio:
+- tema especifico
+- historia real ou figura reconhecivel
+- detalhe concreto
+- ponte honesta com o assunto
+- desenvolvimento da historia depois da capa
+
+Proibido:
+- metafora batida
+- "o corpo e como uma maquina"
+- "o corpo e como uma casa"
+- "o corpo e como um jardim"
+- abrir com "todo mundo sabe"
+- inventar personagem generica
+- largar a historia depois da capa
+- pular direto para o tecnico sem explicar a ponte
+
+Quando usar:
+conteudo tecnico
+tema que precisa ficar mais memoravel
+posts que precisam de uma entrada mais criativa sem perder seriedade
+
+
+3.2 Gancho Temporal
+
+ID: temporal
+Nome no app: Temporal
+
+Funcao:
+ancorar o post no tempo
+ligar o modo historia
+baixar a defesa da leitora
+
+Exemplos de direcao:
+"Ha 6 meses..."
+"Durante anos..."
+"Toda segunda ela comecava de novo..."
+
+Quando usar:
+origem
+transformacao
+antes e depois
+casos reais
+trajetoria
+evolucao
+
+
+3.3 Pergunta Estranha / Loop
+
+ID: pergunta
+Nome no app: Pergunta estranha / loop
+
+Funcao:
+abrir uma lacuna que a leitora precisa fechar
+
+Obrigatorio:
+- pergunta especifica
+- pergunta concreta
+- pergunta meio estranha
+- resposta so aparece nos slides
+
+Proibido:
+- pergunta que ja entrega a tese
+- pergunta retorica de coach
+- pergunta moralista
+- "ate quando voce vai..."
+- "sera que voce..."
+- "por que voce ainda acha..."
+
+Exemplo ruim:
+"por que voce agacha ha 2 anos e ainda acha que o problema e genetica?"
+Problema: ja entrega a tese
+
+Exemplo bom:
+"quantas das suas 4 series de agachamento realmente chegaram perto do musculo que voce quer crescer?"
+Motivo: abre loop, e concreto e nao entrega tudo de cara
+
+
+4. EMOCOES
+
+As emocoes definem o motor emocional do gancho e do conteudo.
+Podem ser combinadas.
+
+
+4.1 Indignacao
+
+ID: raiva
+Nome no app: Indignação
+
+Funcao:
+empurrar para acao
+gerar comentario, compartilhamento, salvamento ou compra
+
+Mira correta:
+a mentira
+a industria
+o mito
+o atalho
+a promessa falsa
+a informacao que sabotou a leitora
+
+Nunca mirar:
+na propria leitora
+
+Sensacao:
+"fui enganada"
+
+
+4.2 Polarizacao
+
+ID: polarizacao
+Nome no app: Polarização
+
+Funcao:
+escolher um lado e abandonar o meio-termo
+criar tribo
+
+Direcao:
+metodo e constancia contra atalho e milagre
+
+Regra:
+quem concorda vira tribo
+quem discorda engaja
+sem ficar em cima do muro
+
+
+4.3 Vies De Confirmacao
+
+ID: vies
+Nome no app: Viés de confirmação
+
+Funcao:
+dizer em voz alta o que a leitora ja suspeitava, mas nao conseguia provar ou articular
+
+Efeito:
+alivio
+identificacao
+confianca
+
+Sensacao:
+"finalmente alguem falou o que eu pensava"
+
+
+4.4 Curiosidade
+
+ID: curiosidade
+Nome no app: Curiosidade
+
+Funcao:
+abrir uma lacuna de informacao
+fazer a leitora sentir que quase sabe, mas precisa continuar
+
+Obrigatorio:
+loop preciso
+promessa especifica
+pergunta ou detalhe concreto
+
+Proibido:
+"descubra o segredo"
+curiosidade vaga
+promessa generica
+
+
+5. PONTE DE CORRELACAO
+
+A ponte de correlacao so entra se existir.
+Ela pode ser:
+- sugerida pela API de correlacao
+- escrita manualmente
+- escolhida por voce antes de gerar gancho ou roteiro
+
+
+5.1 Como A Ponte E Encontrada
+
+Quando voce pede correlacoes, o sistema:
+1. pega o tema/conteudo
+2. usa o publico e a aresta da marca
+3. pede para a IA montar buscas curtas
+4. busca temas externos via Exa
+5. filtra pontes que realmente conectam com o assunto
+6. marca se alguma ponte ja foi usada recentemente
+
+As buscas tentam vir de dominios diferentes:
+- filosofia
+- historia ou mitologia
+- grande nome / lenda / esporte / arte / superacao
+
+
+5.2 Regra Da Ponte
+
+A ponte precisa compartilhar um principio real com o assunto.
+Ela nao pode ser enfeite.
+Ela precisa ser honesta.
+
+Uso correto:
+abrir com historia, figura ou detalhe concreto
+explicar quem ou o que e aquilo
+desenvolver a ponte antes de ir para o tecnico
+amarrar o principio comum ao tema do post
+
+Uso errado:
+citar uma historia famosa e abandonar
+usar metafora solta
+forcar uma conexao que nao existe
+pular direto para treino, dieta ou gluteo sem desenvolver a ponte
+
+
+6. GANCHOS REJEITADOS
+
+Fonte:
+Supabase KV: rejects
+Filtro usado no fluxo:
+kind = hook
+
+Como entra no fluxo:
+quando existem ganchos rejeitados, eles entram na geracao de novos ganchos como anti-exemplo
+A IA recebe: nao gere nada parecido com isso
+
+Estado atual em 25/06/2026:
+nenhum gancho rejeitado salvo com kind = hook
+
+
+7. ROTEIROS REJEITADOS
+
+Fonte:
+Supabase KV: rejects
+Filtro usado no fluxo:
+kind = voice
+
+Como entra no fluxo:
+quando existem roteiros/aberturas rejeitados, eles entram na geracao do roteiro como anti-exemplo
+A IA recebe: fuja desse tom, angulo ou jeito
+
+Estado atual em 25/06/2026:
+
+7.1 Roteiro rejeitado salvo
+
+Registro:
+Confronto
+
+Criado em:
+2026-06-22T02:40:06.988Z
+
+Texto salvo:
+A ciencia nao sustenta isso
+
+Nao existe evidencia solida de que ele prejudique forca ou massa muscular
+
+O que travou foi a desculpa que te deram pra voce parar de olhar o resto
+
+Voce comecou o anticoncepcional e tres meses depois leu em algum lugar que ele "trava o ganho de gluteo".
+
+Ai pronto.
+
+Achou o culpado.
+
+E parou de procurar o problema de verdade.
+
+Eu entendo. E confortavel.
+
+Quando o motivo e o remedio, a culpa sai de voce.
+
+Nao e seu treino, nao e sua progressao, nao e a dieta que voce
+
+Observacao:
+esse texto esta salvo como rejeitado e deve ser tratado como anti-exemplo.
+Ele tambem contem padroes que hoje foram proibidos pelas regras fixas novas.
+
+
+8. ESTRUTURAS QUE FUNCIONARAM
+
+Fonte:
+Supabase KV: gold_structures
+
+Como entra no fluxo:
+quando existem estruturas salvas, o roteiro recebe uma estrutura validada por metrica como molde de arco
+A IA deve adaptar ao tema, nao copiar literalmente
+
+Estado atual em 25/06/2026:
+nenhuma estrutura salva em gold_structures
+
+
+9. ONDE CADA BLOCO ENTRA NO FLUXO
+
+9.1 Gerar Ganchos
+
+Entrada:
+tema/conteudo
+tipo de gancho
+emocoes
+registro/tom
+ponte de correlacao, se houver
+
+Usa:
+regras fixas de escrita
+registro/tom
+tipo de gancho
+emocoes
+ponte de correlacao
+voz ouro
+ganchos rejeitados
+
+Saida:
+5 opcoes de gancho
+cada uma com:
+- capa
+- abertura
+
+
+9.2 Gerar Roteiro
+
+Entrada:
+tema/conteudo
+gancho escolhido, se houver
+tom/registro
+tipo de gancho
+emocoes
+ponte de correlacao
+fonte anexada, se houver
+
+Usa:
+regras fixas de escrita
+publico da marca
+aresta da marca
+grande tese
+inimigo
+historia real do Candido, quando fizer sentido
+aprendizados dos dados reais
+conhecimento de fundo da biblioteca de fontes
+livros indexados, quando houver embeddings
+voz ouro
+roteiros rejeitados
+estruturas que funcionaram
+frescor para evitar repeticao
+
+Saida:
+roteiro corrido
+editavel antes de virar carrossel
+
+
+9.3 Limpeza Do Roteiro
+
+Depois de gerar, o sistema:
+detecta vicios de IA
+limpa travessao
+remove ponto final no fim de frase
+remove muleta de "falta de"
+evita formula "nao e X, e Y"
+mantem o minimo de alteracao possivel
+
+
+9.4 Gerar Carrossel
+
+Entrada:
+roteiro aprovado
+numero de cards
+layout escolhido
+legenda ligada ou nao
+capa travada, se houver
+registro/gancho/emocoes como intencao
+
+Usa:
+regras fixas de escrita
+roteiro aprovado
+instrucao de quantidade exata de cards
+sequencia adaptada do layout escolhido
+sentimentos disponiveis da biblioteca de fotos
+ritmos de diagramacao aprovados, se for Layout 1
+
+Saida:
+carrossel em JSON
+cards com layout, texto, imagem/sentimento e destaque
+legenda opcional com no maximo 5 hashtags
+
+
+10. OBSERVACOES IMPORTANTES
+
+- O "cerebro" entra mais forte no roteiro do que no carrossel
+- O carrossel funciona mais como diagramador/fatiador
+- O roteiro e a etapa mais importante para voz, tese e posicionamento
+- Se voce edita um roteiro antes de gerar o carrossel, o app pode aprender com essa edicao como "voz ouro"
+- Se voce salva uma diagramacao como boa, ela vira ritmo de diagramacao para futuros Layouts 1
+- Rejeitados funcionam como anti-exemplos
+- Estruturas que funcionaram funcionam como molde de arco, nao como texto a copiar
+
+
+11. ADENDO FIXO - VOZ E DETECTOR ANTI-IA
+
+Estas regras valem para gancho, roteiro, cards e legenda.
+
+VOZ
+
+- Tom: calmo, linear, introspectivo e breve
+- Fala um a um: "tu", "voce", "meu querido"
+- Soa como quem pensa em voz alta, nao como quem performa
+- Na reflexao, pode hesitar e subestimar: "eu acho que", "nao sei se", "talvez", "meio que"
+- No dado tecnico, fala com autoridade. A hesitacao fica na reflexao, nunca no fato
+- Frase curta. Corta adjetivo e adverbio decorativo
+- Detalhe concreto e mundano, feio e real. Exemplo: "dois ovos cozidos, bolacha agua e sal"
+- Nunca inventar detalhe bonito so para parecer literario
+- Termina na verdade incomoda, nao em frase de efeito redonda
+- Palavroes so quando carregam emocao real, nunca gratuitos: "merda", "porra", "foda pra caralho", "fudido"
+- Repeticao por reinicio pode entrar quando nasce da emocao: "foi pesado cara, foi pesado demais"
+- Fecho de moral em "De nada" so com parcimonia
+
+TIQUES QUE NAO SAO A VOZ
+
+- "olha", "de fato", "pensa", "sabe", "cara" espalhados
+- No maximo um tique no roteiro inteiro
+- Se a mesma muleta aparece em dois cards, virou vicio e deve ser cortada
+
+PROIBIDO - TELLS DE IA
+
+O detector roda antes de entregar.
+
+- "nao e A, e B" espelhado
+- Paralelismo perfeitinho
+- Toda frase virando punchline
+- Exclamacoes em excesso, 4 ou mais e sinal
+- Travessoes em excesso, 5 ou mais e sinal
+- Regra principal: nunca usar travessao no texto gerado
+- Trocadilho publicitario ou esperto
+- Confianca de robo onde deveria haver reflexao humana
+- Jargao tecnico cru: actina, miosina, sintese proteica, mTOR, hiperplasia, homeostase
+- Se o cara comum nao fala a palavra, traduz pra consequencia simples
+- Abertura cliche: "todo mundo sabe", "todos sabemos", "nao e segredo que", "num mundo cada vez mais"
+- Motivacao acucarada: "voce consegue", "vai dar certo", "acredite em voce", "tudo e possivel"
+- Muleta de transicao generica: "no fim das contas", "no final do dia", "a verdade e que", "reflita sobre"
+- Floreio: adjetivo/adverbio decorativo ou detalhe bonito inventado
+- Correlacao preguicosa: "o corpo e como uma ponte/maquina/carro", "todo mundo sabe"
+
+DETERMINISMO VS. ARMA CONTRA A DESCULPA
+
+ERRADO:
+
+- Usar potencial/genetica como desculpa pra passividade ou promessa sem esforco
+- Exemplos errados: "nasceu vencedor, relaxa", "e genetico, e facil", "voce ja e forte, so falta acreditar"
+
+CERTO:
+
+- Usar potencial pra matar a desculpa "sempre fui fraco"
+- So funciona se logo depois o texto cobra esforco diario, metodo e desconforto
+- Teste: depois de invocar potencial, o texto exige desconforto/esforco diario? Certo
+- Se oferece conforto, facilidade ou inevitabilidade, esta errado
+
+ESTRUTURA COMO FLUXO
+
+Gancho -> contexto -> objecao real do leitor -> resposta -> desenrola -> ponto de virada -> custo de nao mudar -> moral -> fecha espelhando o gancho -> CTA
+
+Regras:
+
+- Escreve como pensamento que flui
+- Sem titulos
+- Sem "card 1"
+- Sem numerar
+- Sem rotulos de beat
+
+PARAGRAFO
+
+- Maximo 3 linhas
+- Se passar, quebra em outro paragrafo
+
+
+12. TIPOS DE GANCHO ATUALIZADOS
+
+12.1 CORRELACAO
+
+ID:
+correlacao
+
+Funcao:
+partir de um tema/historia especifico, real e relacionavel, de fora do fitness, e conectar ao assunto tecnico
+
+Obrigatorio:
+
+- Ponte concreta
+- Pessoa real, detalhe real, acontecimento real
+- Nunca usar "o cara" vago/inventado
+- A correlacao nao acaba no gancho
+- O card seguinte precisa desenvolver a historia e fazer a ponte explicita
+- O leitor precisa entender quem/o que e como conecta
+
+Proibido:
+
+- Metafora batida: "o corpo e como uma ponte/maquina/carro"
+- Abrir com "todo mundo sabe"
+- Largar a historia depois da capa
+- Pular direto pro ponto tecnico
+- Inventar historia vaga quando nao houver ponte concreta
+
+Quando usar:
+conteudo tecnico e tema que precisa ficar mais memoravel
+
+12.2 TEMPORAL
+
+ID:
+temporal
+
+Funcao:
+ancorar numa marca de tempo que da sensacao implicita de "era uma vez"
+
+Direcoes:
+
+- "Em 1900, nasceu o homem que..."
+- "Aos 13, 14 anos, teu corpo foi banhado em testosterona pela primeira vez"
+
+Quando usar:
+origem, transformacao, descoberta, antes e depois
+
+12.3 PERGUNTA ESTRANHA / LOOP
+
+ID:
+pergunta
+
+Funcao:
+abrir com uma pergunta especifica, concreta e meio estranha que o leitor nao consegue responder de cara
+
+Obrigatorio:
+
+- Pergunta que so fecha nos slides
+- Nao pode entregar resposta nem tese
+- Precisa ter misterio honesto: fato, numero ou detalhe concreto
+
+Proibido:
+
+- Pergunta retorica de coach
+- "por que voce ainda acha que...?"
+- "sera que voce...?"
+- "ate quando voce vai...?"
+- Pergunta generica
+
+Exemplo ruim:
+"por que tua voz engrossou aos 14 e tu segue achando que nasceu fraco?"
+
+Exemplo bom:
+"quanto musculo teu corpo construiu sozinho, sem tu mexer um dedo, antes dos 15 anos?"
+
+
+13. ONDE CADA BLOCO ENTRA NO FLUXO - VERSAO ATUAL
+
+GERAR GANCHOS
+
+Usa:
+
+- regras fixas
+- registro/tom
+- tipo de gancho
+- emocoes
+- ponte de correlacao, se houver
+- voz ouro
+- ganchos rejeitados
+- detector anti-IA antes de entregar
+
+Nao usa ainda:
+
+- Grande Tese
+- Inimigo
+- historia completa da marca
+
+GERAR ROTEIRO
+
+Usa:
+
+- regras fixas
+- publico da marca
+- aresta da marca
+- Grande Tese
+- Inimigo
+- historia real do Pedro/Candido quando fizer sentido
+- aprendizados das metricas
+- exemplos "minha voz"
+- roteiros rejeitados
+- estruturas que funcionaram
+- frescor para evitar repeticao
+- RAG dos livros indexados
+- fonte anexada manualmente
+
+LIMPEZA DO ROTEIRO
+
+- Detecta tells de IA automaticamente
+- Se necessario, chama outro modelo so para limpar vicios
+- Nao reescreve tudo
+- Aceita a limpeza somente se reduziu os tells e nao encolheu demais o texto
+
+GERAR CARROSSEL
+
+Usa:
+
+- roteiro aprovado
+- numero de cards
+- layout escolhido
+- catalogo de sentimentos/fotos
+- ritmos de diagramacao aprovados
+
+Regra principal:
+
+- Nao reescreve o roteiro aprovado
+- Preserva as palavras do roteiro
+- O cerebro textual entra forte no roteiro; no carrossel ele quase so orienta corte, layout e imagem

@@ -15,6 +15,7 @@ export default function Biblioteca() {
   const [dragCat, setDragCat] = useState(""); // categoria sob o arrasto (highlight)
   const [editing, setEditing] = useState(""); // categoria sendo renomeada
   const [editName, setEditName] = useState("");
+  const [imgV, setImgV] = useState<Record<string, number>>({}); // cache-bust por URL de foto
   const logoAddRef = useRef<HTMLInputElement | null>(null);
   const upRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -72,10 +73,31 @@ export default function Biblioteca() {
     if (d.ok) { setNewCat(""); toast(`✓ categoria "${d.key}" criada`); load(); }
     else toast("nome inválido", "err");
   }
+  async function repairCat(key: string) {
+    setBusy(`repair:${key}`);
+    try {
+      const r = await fetch("/api/library", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "repair", name: key }) });
+      const d = await r.json();
+      if (d.ok) { toast(`✓ ${d.count} foto(s) recuperada(s) em "${key}"`); await load(); }
+      else toast(d.error || "erro ao reparar", "err");
+    } catch { toast("erro ao reparar", "err"); }
+    setBusy("");
+  }
+
   async function delCat(key: string) {
-    if (!confirm(`Apagar a categoria "${key}" do catálogo? (os arquivos no disco não são apagados)`)) return;
-    await fetch(`/api/library?category=${encodeURIComponent(key)}`, { method: "DELETE" });
-    toast("categoria removida"); load();
+    if (!confirm(`Apagar a categoria "${key}" da biblioteca?`)) return;
+    const before = cats;
+    setCats((prev) => prev.filter((c) => c.key !== key));
+    try {
+      const r = await fetch(`/api/library?category=${encodeURIComponent(key)}`, { method: "DELETE" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "não consegui apagar");
+      toast("categoria removida");
+      await load();
+    } catch (e) {
+      setCats(before);
+      toast(e instanceof Error ? e.message : "erro ao apagar", "err");
+    }
   }
   async function renameCat(from: string) {
     const name = editName.trim();
@@ -101,10 +123,45 @@ export default function Biblioteca() {
     setBusy("");
     load();
   }
-  async function delImage(key: string, url: string) {
-    await fetch(`/api/library?category=${encodeURIComponent(key)}&image=${encodeURIComponent(url)}`, { method: "DELETE" });
-    load();
+  async function rotateImage(catKey: string, url: string) {
+    setBusy(`rotate:${url}`);
+    try {
+      const r = await fetch(`/api/library?category=${encodeURIComponent(catKey)}&image=${encodeURIComponent(url)}`, { method: "PATCH" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(d.error || "erro ao girar", "err"); return; }
+      const newUrl = d.newUrl as string | undefined;
+      if (newUrl && newUrl !== url) {
+        // Substitui a URL no estado (nova URL → CDN entrega versão girada)
+        setCats((prev) => prev.map((c) => c.key === catKey ? { ...c, images: c.images.map((src) => src === url ? newUrl : src) } : c));
+      } else {
+        setImgV((v) => ({ ...v, [url]: (v[url] || 0) + 1 }));
+      }
+      toast("foto girada ✓");
+    } catch { toast("erro ao girar", "err"); }
+    setBusy("");
   }
+
+  async function delImage(key: string, url: string) {
+    const before = cats;
+    setCats((prev) => prev.map((c) => (c.key === key ? { ...c, images: c.images.filter((src) => src !== url) } : c)));
+    try {
+      const r = await fetch(`/api/library?category=${encodeURIComponent(key)}&image=${encodeURIComponent(url)}`, { method: "DELETE" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "não consegui remover a foto");
+      toast("foto removida");
+      await load();
+    } catch (e) {
+      setCats(before);
+      toast(e instanceof Error ? e.message : "erro ao remover foto", "err");
+    }
+  }
+
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") setLightbox(null); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
 
   const overlays = cats.find((c) => c.key === "overlays")?.images || [];
   const displayCats = cats.filter((c) => c.key !== "overlays");
@@ -256,17 +313,25 @@ export default function Biblioteca() {
                 {busy === c.key ? "enviando" : "subir fotos"}
               </button>
               <input ref={(el) => { upRefs.current[c.key] = el; }} type="file" accept="image/*" multiple hidden onChange={(e) => { uploadImages(c.key, Array.from(e.target.files || [])); e.currentTarget.value = ""; }} />
-              <button onClick={() => delCat(c.key)} className="studio-danger-btn" type="button">apagar</button>
+<button onClick={() => delCat(c.key)} className="studio-danger-btn" type="button">apagar</button>
             </div>
             {c.images.length > 0 ? (
               <div className="media-grid">
-                {c.images.map((src) => (
-                  <div key={src} className="media-tile">
-                    <img src={src} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    <button onClick={() => delImage(c.key, src)} title="remover foto"
-                      className="tile-remove">x</button>
-                  </div>
-                ))}
+                {c.images.map((src) => {
+                  const vsrc = `${src}${imgV[src] ? `?v=${imgV[src]}` : ""}`;
+                  return (
+                    <div key={src} className="media-tile">
+                      <img src={vsrc} alt="" loading="lazy"
+                        onClick={() => setLightbox(vsrc)}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "zoom-in" }} />
+                      <button onClick={() => rotateImage(c.key, src)} disabled={busy === `rotate:${src}`} title="girar 90°"
+                        style={{ position: "absolute", top: 4, left: 4, background: "rgba(0,0,0,.72)", color: "#fff", border: "none", borderRadius: 6, width: 28, height: 28, fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {busy === `rotate:${src}` ? "…" : "↻"}
+                      </button>
+                      <button onClick={() => delImage(c.key, src)} title="remover foto" className="tile-remove">x</button>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="studio-empty">Arraste fotos para esta categoria</div>
@@ -278,6 +343,25 @@ export default function Biblioteca() {
       <div className="studio-note">
         A categoria <b style={{ color: "#9aa0b0" }}>coach</b> e qualquer uma que comece com <b style={{ color: "#9aa0b0" }}>coach</b> é usada como foto de capa. As outras funcionam melhor por emoção.
       </div>
+
+      {/* LIGHTBOX */}
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.93)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, cursor: "zoom-out" }}>
+          <button
+            onClick={() => setLightbox(null)}
+            style={{ position: "absolute", top: 18, right: 18, background: "rgba(255,255,255,.12)", color: "#fff", border: "none", borderRadius: "50%", width: 44, height: 44, fontSize: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
+            ×
+          </button>
+          <img
+            src={lightbox}
+            alt=""
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "92vw", maxHeight: "90vh", objectFit: "contain", borderRadius: 10, boxShadow: "0 8px 60px rgba(0,0,0,.6)", cursor: "default" }}
+          />
+        </div>
+      )}
     </div>
   );
 }

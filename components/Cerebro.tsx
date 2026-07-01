@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { REGISTROS, REG_MAP } from "@/lib/vitals";
 
 // SEÇÃO SANFONA — clica no título pra abrir/fechar. Condensa o cérebro (vê o resumo, abre o que quiser).
 function Section({ title, hint, children, defaultOpen = false }: { title: string; hint?: string; children: ReactNode; defaultOpen?: boolean }) {
@@ -26,14 +27,32 @@ function Stat({ n, l }: { n: number; l: string }) {
   );
 }
 
+// tag do registro de um exemplo (emoji + label). "" se não tiver tom marcado.
+function RegTag({ id }: { id?: string }) {
+  if (!id || !(id in REG_MAP)) return <span style={{ fontSize: 10.5, color: "#5a6378" }}>sem tom</span>;
+  const r = REG_MAP[id as keyof typeof REG_MAP];
+  return <span style={{ fontSize: 10.5, color: r.color, fontWeight: 600, whiteSpace: "nowrap" }}>{r.emoji} {r.label}</span>;
+}
+
 type Brain = {
   audience: string; edge: string;
   defaults: { audience: string; edge: string };
   counts: { voz: number; estrutura: number; livros: number; trechos: number; aprendizado: number };
   livros: { title: string; chunks: number }[];
 };
-type Gold = { text: string; createdAt?: string; note?: string };
+type Gold = { text: string; createdAt?: string; note?: string; registro?: string };
 type Struct = { outline: string; score?: number; tema?: string; hook?: string; createdAt?: string };
+type Reject = { kind: string; text: string; registro?: string; createdAt: string };
+
+// seletor de registro reutilizável (inclui "sem tom")
+function RegSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="studio-textarea" style={{ width: 220, flexShrink: 0, fontSize: 12.5, padding: "8px 10px" }}>
+      <option value="">tom (opcional)</option>
+      {REGISTROS.map((r) => <option key={r.id} value={r.id}>{r.emoji} {r.label}</option>)}
+    </select>
+  );
+}
 
 export default function Cerebro() {
   const [b, setB] = useState<Brain | null>(null);
@@ -41,32 +60,26 @@ export default function Cerebro() {
   const [edg, setEdg] = useState("");
   const [voz, setVoz] = useState<Gold[]>([]);
   const [estr, setEstr] = useState<Struct[]>([]);
+  const [rejects, setRejects] = useState<Reject[]>([]);
   const [msg, setMsg] = useState("");
   const [newVoz, setNewVoz] = useState("");
+  const [newVozReg, setNewVozReg] = useState("");
+  const [newRej, setNewRej] = useState("");
+  const [newRejReg, setNewRejReg] = useState("");
 
   async function load() {
-    const [br, vz, st] = await Promise.all([
+    const [br, vz, st, rj] = await Promise.all([
       fetch("/api/brain").then((r) => r.json()),
       fetch("/api/voice").then((r) => r.json()),
       fetch("/api/structures").then((r) => r.json()),
+      fetch("/api/reject?kind=voice").then((r) => r.json()).catch(() => ({ rejects: [] })),
     ]);
     setB(br); setAud(br.audience || ""); setEdg(br.edge || "");
-    setVoz(vz.examples || []); setEstr(st.structures || []);
+    setVoz(vz.examples || []); setEstr(st.structures || []); setRejects(rj.rejects || []);
   }
   useEffect(() => {
-    let alive = true;
-    Promise.all([
-      fetch("/api/brain").then((r) => r.json()),
-      fetch("/api/voice").then((r) => r.json()),
-      fetch("/api/structures").then((r) => r.json()),
-    ])
-      .then(([br, vz, st]) => {
-        if (!alive) return;
-        setB(br); setAud(br.audience || ""); setEdg(br.edge || "");
-        setVoz(vz.examples || []); setEstr(st.structures || []);
-      })
-      .catch(() => {});
-    return () => { alive = false; };
+    const id = window.setTimeout(() => { load().catch(() => {}); }, 0);
+    return () => window.clearTimeout(id);
   }, []);
   function flash(m: string) { setMsg(m); setTimeout(() => setMsg(""), 2500); }
 
@@ -75,14 +88,23 @@ export default function Cerebro() {
     flash("Régua salva ✓ — já vale nas próximas gerações"); load();
   }
   async function addVoz() {
-    if (newVoz.trim().length < 20) return;
-    await fetch("/api/voice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: newVoz }) });
+    if (newVoz.trim().length < 20) { flash("cola um texto um pouco maior (mín. 20 caracteres)"); return; }
+    await fetch("/api/voice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: newVoz, registro: newVozReg || undefined }) });
     setNewVoz(""); flash("Exemplo de voz adicionado ✓"); load();
   }
   async function delVoz(i: number) { await fetch(`/api/voice?i=${i}`, { method: "DELETE" }); load(); }
   async function delEstr(i: number) { await fetch(`/api/structures?i=${i}`, { method: "DELETE" }); load(); }
+  async function addRej() {
+    if (newRej.trim().length < 12) { flash("cola um trecho um pouco maior"); return; }
+    await fetch("/api/reject", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "voice", text: newRej, registro: newRejReg || undefined }) });
+    setNewRej(""); flash("Anti-ouro registrado ✓ — a IA vai fugir desse padrão"); load();
+  }
+  async function delRej(at: string) { await fetch(`/api/reject?at=${encodeURIComponent(at)}`, { method: "DELETE" }); load(); }
 
   if (!b) return <div className="studio-muted" style={{ padding: 30 }}>Carregando o cérebro</div>;
+
+  // contagem de exemplos de voz por registro (mostra os vazios — ex: 👑 e ☠️ novos)
+  const vozPorReg = REGISTROS.map((r) => ({ r, n: voz.filter((g) => g.registro === r.id).length }));
 
   return (
     <div className="studio-page">
@@ -102,8 +124,8 @@ export default function Cerebro() {
       <section className="brain-stats">
         <Stat n={b.counts.voz} l="Voz (exemplos)" />
         <Stat n={b.counts.estrutura} l="Estruturas-ouro" />
+        <Stat n={rejects.length} l="Anti-ouro" />
         <Stat n={b.counts.livros} l="Livros" />
-        <Stat n={b.counts.trechos} l="Trechos (ciência)" />
         <Stat n={b.counts.aprendizado} l="Posts medidos" />
       </section>
 
@@ -119,16 +141,56 @@ export default function Cerebro() {
         <div><button onClick={saveRegua} className="dg-btn-primary" style={{ marginTop: 14, padding: "10px 22px" }}>Salvar régua</button></div>
       </Section>
 
-      <Section title="⭐ Voz — como você escreve" hint={`${voz.length} ${voz.length === 1 ? "exemplo" : "exemplos"}`}>
-        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-          <textarea value={newVoz} onChange={(e) => setNewVoz(e.target.value)} placeholder="cola um texto teu que é a tua voz no ponto" rows={2} className="studio-textarea" style={{ fontSize: 13 }} />
-          <button onClick={addVoz} className="dg-btn" style={{ whiteSpace: "nowrap" }}>+ exemplo</button>
+      <Section title="⭐ Voz — como você escreve (por tom)" hint={`${voz.length} ${voz.length === 1 ? "exemplo" : "exemplos"}`} defaultOpen>
+        <div style={{ fontSize: 12, color: "#9aa0b0", lineHeight: 1.55, marginBottom: 10 }}>
+          É o texto REAL que a IA imita pra clonar sua cadência. Quanto mais, melhor — e <b style={{ color: "#cfcfcf" }}>marque o tom</b> de cada um, principalmente os novos (👑 Domínio e ☠️ Darkside), que ainda estão zerados.
+        </div>
+        {/* cobertura por registro — deixa os vazios óbvios */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          {vozPorReg.map(({ r, n }) => (
+            <span key={r.id} title={`${n} exemplo(s) no tom ${r.label}`} style={{ fontSize: 11.5, padding: "4px 9px", borderRadius: 999, border: "1px solid " + (n === 0 ? "#5a2030" : "#2e2e36"), background: n === 0 ? "rgba(239,71,111,0.08)" : "#17171b", color: n === 0 ? "#e0738c" : r.color, fontWeight: 600, whiteSpace: "nowrap" }}>
+              {r.emoji} {r.label}: {n}
+            </span>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+          <textarea value={newVoz} onChange={(e) => setNewVoz(e.target.value)} placeholder="cola um texto teu que é a tua voz no ponto (legenda, áudio transcrito, post antigo...)" rows={3} className="studio-textarea" style={{ fontSize: 13 }} />
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+          <RegSelect value={newVozReg} onChange={setNewVozReg} />
+          <button onClick={addVoz} className="dg-btn-primary" style={{ whiteSpace: "nowrap", padding: "9px 18px" }}>+ adicionar exemplo</button>
         </div>
         {!voz.length && <div className="studio-empty">Nenhum exemplo de voz ainda</div>}
         {voz.map((g, i) => (
-          <div key={i} className="studio-section studio-section--pad" style={{ marginBottom: 8, display: "flex", gap: 10 }}>
-            <div style={{ flex: 1, fontSize: 12.5, color: "#cfcfcf", lineHeight: 1.45, whiteSpace: "pre-line", maxHeight: 90, overflow: "hidden" }}>{g.text}</div>
+          <div key={g.createdAt || i} className="studio-section studio-section--pad" style={{ marginBottom: 8, display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ marginBottom: 5 }}><RegTag id={g.registro} /></div>
+              <div style={{ fontSize: 12.5, color: "#cfcfcf", lineHeight: 1.45, whiteSpace: "pre-line", maxHeight: 90, overflow: "hidden" }}>{g.text}</div>
+            </div>
             <button onClick={() => delVoz(i)} className="studio-danger-btn" style={{ alignSelf: "flex-start", flexShrink: 0 }} type="button">excluir</button>
+          </div>
+        ))}
+      </Section>
+
+      <Section title="🚫 Anti-ouro — o que NÃO é a sua voz" hint={`${rejects.length} ${rejects.length === 1 ? "trecho" : "trechos"}`}>
+        <div style={{ fontSize: 12, color: "#9aa0b0", lineHeight: 1.55, marginBottom: 10 }}>
+          Cola aqui um trecho que saiu <b style={{ color: "#cfcfcf" }}>fora de você</b> (genérico, coachismo, cara de IA). A geração foge desse padrão. (Também dá pra rejeitar direto na tela de Criar.)
+        </div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+          <textarea value={newRej} onChange={(e) => setNewRej(e.target.value)} placeholder="cola o trecho que NÃO te representa..." rows={2} className="studio-textarea" style={{ fontSize: 13 }} />
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+          <RegSelect value={newRejReg} onChange={setNewRejReg} />
+          <button onClick={addRej} className="dg-btn" style={{ whiteSpace: "nowrap", padding: "9px 18px" }}>+ marcar anti-ouro</button>
+        </div>
+        {!rejects.length && <div className="studio-empty">Nenhum anti-ouro ainda</div>}
+        {rejects.map((r) => (
+          <div key={r.createdAt} className="studio-section studio-section--pad" style={{ marginBottom: 8, display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ marginBottom: 5 }}><RegTag id={r.registro} /></div>
+              <div style={{ fontSize: 12.5, color: "#b89aa2", lineHeight: 1.45, whiteSpace: "pre-line", maxHeight: 70, overflow: "hidden" }}>✗ {r.text}</div>
+            </div>
+            <button onClick={() => delRej(r.createdAt)} className="studio-danger-btn" style={{ alignSelf: "flex-start", flexShrink: 0 }} type="button">excluir</button>
           </div>
         ))}
       </Section>

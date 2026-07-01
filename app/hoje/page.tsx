@@ -8,7 +8,10 @@ import { setIntent, readDraft, type Draft } from "@/lib/handoff";
 export default function HojePage() {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft | null>(null);
-  useEffect(() => { setDraft(readDraft()); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDraft(readDraft()), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const hasDraft = !!(draft?.roteiro?.trim() || draft?.carousel?.cards?.length || draft?.content?.trim());
   const draftLabel = draft?.roteiro?.trim()

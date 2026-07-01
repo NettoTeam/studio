@@ -5,20 +5,23 @@ import { emotionBlock, hookBlock } from "@/lib/frameworks";
 import { registroBlock } from "@/lib/vitals";
 import { textOf, extractJson, pickRandom } from "@/lib/llm";
 import { detectTells } from "@/lib/tells";
+import { cleanGeneratedText, GENERATION_RULES } from "@/lib/generation-rules";
 
 const CHEAP_MODEL = "claude-haiku-4-5";
 const CLEAN_MODEL = "claude-sonnet-4-6"; // passe cirúrgico de limpeza dos tells
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300; // o juiz de voz pode regenerar 1x — precisa de fôlego (requer plano Vercel Pro)
 
 const WRITE_MODEL = process.env.ANTHROPIC_WRITE_MODEL || "claude-opus-4-8";
+const JUDGE_MODEL = process.env.ANTHROPIC_JUDGE_MODEL || "claude-sonnet-4-6"; // juiz de voz (Tier 3)
+const VOICE_MIN = 72; // abaixo disso, regenera uma vez com a crítica do juiz
 
 export async function POST(req: Request) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return Response.json({ error: "ANTHROPIC_API_KEY não configurada." }, { status: 500 });
 
-  const body = (await req.json().catch(() => ({}))) as { content?: string; hook?: string; emotions?: string[]; correlation?: string; inlineSource?: string; registro?: string; chosenHook?: string };
+  const body = (await req.json().catch(() => ({}))) as { content?: string; hook?: string; emotions?: string[]; correlation?: string; inlineSource?: string; registro?: string; chosenHook?: string; funil?: "topo" | "meio" | "fundo" };
   const content = (body.content || "").trim();
   if (!content) return Response.json({ error: "Manda o conteúdo." }, { status: 400 });
 
@@ -27,6 +30,12 @@ export async function POST(req: Request) {
   const emoBlock = emotionBlock(body.emotions || []);
   const hkBlock = hookBlock(body.hook);
   const regBlock = registroBlock(body.registro);
+  const FUNIL_MAP = {
+    topo: `\n\nETAPA DO FUNIL: TOPO (descoberta)\nObjetivo: atrair atenção de quem não te conhece e não sabe que tem um problema. Foco em CRIAR CONSCIÊNCIA, não vender.\n- Linguagem simples, emocional, sem jargão técnico pesado.\n- Gancho fortíssimo — a leitora precisa parar de rolar o feed.\n- Alto potencial de compartilhamento e identificação.\n- Conteúdo curto, direto, visceral. Pode ser: mito/verdade, erro comum, curiosidade, quebra de crença, identificação.\n- Objetivo psicológico: "nossa, isso acontece comigo" ou "nunca tinha pensado nisso".\n- NÃO inclua convite pra consulta nem fale de serviço. NÃO seja educativo demais — seja RELEVANTE e CHAMATIVO.`,
+    meio: `\n\nETAPA DO FUNIL: MEIO (consideração)\nObjetivo: transformar curiosidade em confiança. A leitora já sabe que tem um problema — agora quer aprender e quer saber se você entende do assunto.\n- Mais profundidade e contexto do que o conteúdo de topo.\n- Mostre o MÉTODO, o raciocínio, a forma de pensar — não só a informação.\n- Conteúdo educativo, científico traduzido, comparativo, frameworks, bastidores do processo.\n- Objetivo psicológico: "esse profissional realmente entende do que está falando".\n- Pode ter CTA leve (salvar, seguir), mas NÃO força convite pra consulta ainda.`,
+    fundo: `\n\nETAPA DO FUNIL: FUNDO (decisão)\nObjetivo: gerar ação — consulta, agendamento, venda. A leitora já confia, só falta decidir.\n- Foco em ELIMINAR OBJEÇÕES: "será que funciona comigo?", "vale o investimento?", "posso confiar?".\n- Use provas sociais, resultados reais, depoimentos, bastidores do atendimento, cases de sucesso.\n- Conteúdo de decisão: antes/depois, frequentes dúvidas respondidas, garantias, convite direto.\n- Objetivo psicológico: "é exatamente o que eu preciso" → "vou entrar em contato".\n- Termine com CTA DIRETO e claro (agendar, mandar mensagem, etc.).`,
+  };
+  const funilBlock = body.funil ? FUNIL_MAP[body.funil] : "";
   const chosen = (body.chosenHook || "").trim().slice(0, 600);
   const chosenBlock = chosen
     ? `\n\nABERTURA JÁ ESCOLHIDA E APROVADA POR VOCÊ — o roteiro DEVE começar EXATAMENTE com esta abertura (pode ajustar levemente a pontuação/quebra pra fluir, mas mantenha as palavras e a força dela; NÃO troque por outra abertura, NÃO suavize). Construa o arco inteiro pra ENTREGAR e ESPELHAR essa abertura no fecho:\n"""${chosen}"""`
@@ -96,7 +105,8 @@ export async function POST(req: Request) {
   const gold = await getGold();
   const goldMatch = reg ? gold.filter((g) => g.registro === reg) : [];
   const goldOther = gold.filter((g) => !goldMatch.includes(g));
-  const pickedGold = [...pickRandom(goldMatch, 3), ...pickRandom(goldOther, 3)].slice(0, 3);
+  // até 3 do MESMO registro (garante a cadência certa) + completa até 5 com outros
+  const pickedGold = [...pickRandom(goldMatch, 3), ...pickRandom(goldOther, 5)].slice(0, 5);
   const goldBlock = pickedGold.length
     ? `\n\nA VOZ DO CÂNDIDO — EXEMPLOS REAIS DE COMO ELE ESCREVE (imite a CADÊNCIA, o ritmo, as quebras, o jeito de fechar; NÃO copie tema/frases, é o TOM)${goldMatch.length ? " — priorizei exemplos do MESMO tom" : ""}:\n${pickedGold.map((g, i) => `### exemplo ${i + 1}\n${g.text}`).join("\n\n")}`
     : "";
@@ -113,7 +123,7 @@ export async function POST(req: Request) {
     ? `\n\nESTRUTURA QUE FUNCIONOU (validada por métrica — use como MOLDE do ARCO, adapte ao tema, não copie):\n${pickedStructs.map((s) => s.outline).join("\n")}`
     : "";
 
-  const userMsg = `${reguaBlock}${brandBlock}${historiaBlock}${learnBlock}${regBlock}${freshBlock}${hkBlock}${emoBlock}${chosenBlock}${corrBlock}${structBlock}${booksBlock}${sourcesBlock}${inlineBlock}${goldBlock}${rejectBlock}\n\nCONTEÚDO BRUTO PRA VIRAR ROTEIRO:\n${content}\n\nEscreva o roteiro corrido, na voz do Cândido. Só o texto.`;
+  const userMsg = `${GENERATION_RULES}${reguaBlock}${brandBlock}${historiaBlock}${learnBlock}${regBlock}${funilBlock}${freshBlock}${hkBlock}${emoBlock}${chosenBlock}${corrBlock}${structBlock}${booksBlock}${sourcesBlock}${inlineBlock}${goldBlock}${rejectBlock}\n\nCONTEÚDO BRUTO PRA VIRAR ROTEIRO:\n${content}\n\nEscreva o roteiro corrido, na voz do Cândido. Só o texto.`;
 
   try {
     // ESCREVE o rascunho (pensa o arco antes; o texto de pensamento não entra no roteiro).
@@ -124,7 +134,7 @@ export async function POST(req: Request) {
       system: [{ type: "text", text: ROTEIRO_SYSTEM, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userMsg }],
     });
-    let roteiro = textOf(gen).trim();
+    let roteiro = cleanGeneratedText(textOf(gen)) || "";
     const res = { usage: gen.usage };
 
     // AUTO-LIMPEZA (sempre): se o detector achou tells, conserta SÓ eles — cirúrgico.
@@ -136,21 +146,70 @@ export async function POST(req: Request) {
       try {
         const cl = await anthropic.messages.create({
           model: CLEAN_MODEL, max_tokens: 2600,
-          messages: [{ role: "user", content: `Este é um roteiro do Cândido Netto (Team Netto · N² Squad, voz direta, firme, SEM palavrão). Um detector apontou estes possíveis "tells de IA" (vícios de robô): ${tells.join(" | ")}.\n\nConserte SOMENTE esses pontos. REGRAS DURAS:\n- Mude o MÍNIMO possível. Mantenha TODAS as outras palavras, a cadência, as quebras de linha, a pontuação.\n- NÃO reescreva, NÃO "melhore", NÃO suavize, NÃO acrescente ideia nova, NÃO resuma.\n- Se um "tell" na verdade for proposital e bom na voz dele (ex: uma repetição de força, "seu corpo responde a estímulo"), deixe quieto.\n- Tira muleta de IA: "não é X, é Y" virado clichê, travessão demais, exclamação fácil, frase motivacional açucarada ("você consegue"), jargão. Troca pela forma direta que o Cândido usaria.\n\nDevolva SÓ o texto do roteiro corrigido, nada mais.\n\nROTEIRO:\n${roteiro}` }],
+          messages: [{ role: "user", content: `Este é um roteiro do Cândido Netto (Team Netto · N² Squad, voz calma, linear, introspectiva e breve; palavrão só se carregar emoção real, nunca gratuito). Um detector apontou estes possíveis "tells de IA" (vícios de robô): ${tells.join(" | ")}.\n\nConserte SOMENTE esses pontos. REGRAS DURAS:\n- Mude o MÍNIMO possível. Mantenha TODAS as outras palavras, a cadência, as quebras de linha, a pontuação.\n- NÃO reescreva, NÃO "melhore", NÃO suavize, NÃO acrescente ideia nova, NÃO resuma.\n- Se um "tell" na verdade for proposital e bom na voz dele (ex: uma repetição de força, "seu corpo responde a estímulo"), deixe quieto.\n- Tira muleta de IA: "não é X, é Y" virado clichê, travessão demais, exclamação fácil, frase motivacional açucarada ("você consegue"), jargão técnico cru, transição genérica, trocadilho esperto e determinismo confortável. Troca pela forma direta que o Cândido usaria.\n\nDevolva SÓ o texto do roteiro corrigido, nada mais.\n\nROTEIRO:\n${roteiro}` }],
         });
         const cand = textOf(cl).trim();
         const candTells = detectTells(cand);
         if (cand.length > roteiro.length * 0.6 && candTells.length < tells.length) {
-          roteiro = cand; tells = candTells; cleaned = true;
+          roteiro = cleanGeneratedText(cand) || cand; tells = candTells; cleaned = true;
         }
       } catch (e) { console.error("auto-clean", e instanceof Error ? e.message : String(e)); }
     }
+
+    // ===== JUIZ DE VOZ (Tier 3) — nota 0-100 de "quão Cândido é", comparando com os exemplos-ouro.
+    // Se baixo, regenera UMA vez com a crítica e fica com o melhor dos dois. Se o juiz falhar, não bloqueia.
+    let voiceScore: number | null = null;
+    let voiceIssues: string[] = [];
+    let regenerated = false;
+    async function judgeVoice(text: string): Promise<{ score: number; issues: string[] }> {
+      const refs = pickedGold.length
+        ? pickedGold.map((g, i) => `### exemplo ${i + 1}\n${g.text}`).join("\n\n")
+        : "(sem exemplos-ouro ainda — julgue pela régua de voz do Cândido: calmo, breve, hesita na reflexão, detalhe mundano, fecha na verdade incômoda, zero cara de IA/coachismo)";
+      const jr = await anthropic.messages.create({
+        model: JUDGE_MODEL, max_tokens: 500,
+        messages: [{ role: "user", content: `Você é o juiz de voz do Cândido Netto (Team Netto · N² Squad). Compare o ROTEIRO com os EXEMPLOS REAIS da escrita dele e dê uma nota 0-100 de "quão Cândido isso soa": cadência, brevidade, hesitação na reflexão (não no fato técnico), detalhe concreto/mundano, fecho na verdade incômoda, e ZERO cara de IA / coachismo / motivação açucarada. Seja rigoroso — 100 é "parece escrito por ele". Responda APENAS JSON {"score": <int 0-100>, "issues": ["o que mais destoa da voz dele, bem curto", ...]} (até 4 issues; [] se estiver ótimo).\n\nEXEMPLOS REAIS DA VOZ DELE:\n${refs}\n\nROTEIRO A JULGAR:\n${text}` }],
+      });
+      try {
+        const j = JSON.parse(extractJson(textOf(jr))) as { score?: number; issues?: string[] };
+        return { score: Math.max(0, Math.min(100, Math.round(Number(j.score) || 0))), issues: (j.issues || []).map((x) => (x || "").trim()).filter(Boolean).slice(0, 4) };
+      } catch { return { score: 100, issues: [] }; }
+    }
+    try {
+      const v1 = await judgeVoice(roteiro);
+      voiceScore = v1.score; voiceIssues = v1.issues;
+      if (v1.score < VOICE_MIN) {
+        const fb = `\n\nA TENTATIVA ANTERIOR NÃO SOOU SUFICIENTEMENTE COMO O CÂNDIDO (nota ${v1.score}/100). Reescreva o roteiro inteiro mais na cadência REAL dele (mais breve, mais hesitação na reflexão, detalhe mundano, fecho na verdade incômoda, ZERO cara de IA/coachismo), corrigindo: ${v1.issues.join(" | ") || "soou redondo/genérico demais"}. NÃO perca a substância nem o gancho escolhido.`;
+        const gen2 = await anthropic.messages.create({
+          model: WRITE_MODEL, max_tokens: 6000, thinking: { type: "adaptive" as const },
+          system: [{ type: "text", text: ROTEIRO_SYSTEM, cache_control: { type: "ephemeral" } }],
+          messages: [{ role: "user", content: userMsg + fb }],
+        });
+        let r2 = cleanGeneratedText(textOf(gen2)) || "";
+        let t2 = detectTells(r2);
+        if (t2.length > 0) {
+          try {
+            const cl2 = await anthropic.messages.create({
+              model: CLEAN_MODEL, max_tokens: 2600,
+              messages: [{ role: "user", content: `Conserte SOMENTE estes tells de IA, mudando o MÍNIMO (mantenha cadência, quebras, pontuação; não reescreva, não resuma): ${t2.join(" | ")}.\n\nROTEIRO:\n${r2}` }],
+            });
+            const c2 = textOf(cl2).trim();
+            const c2t = detectTells(c2);
+            if (c2.length > r2.length * 0.6 && c2t.length < t2.length) { r2 = cleanGeneratedText(c2) || c2; t2 = c2t; }
+          } catch {}
+        }
+        const v2 = await judgeVoice(r2);
+        // fica com o melhor: nota do juiz decide; empate → menos tells
+        if (r2.length > 80 && (v2.score > v1.score || (v2.score === v1.score && t2.length < tells.length))) {
+          roteiro = r2; tells = t2; voiceScore = v2.score; voiceIssues = v2.issues; regenerated = true;
+        }
+      }
+    } catch (e) { console.error("voice-judge", e instanceof Error ? e.message : String(e)); }
 
     // registra a ponte usada (frescor) — o pedaço-chave antes do "—"
     if (correlation) { try { await addFreshness(correlation.split("—")[0]); } catch {} }
     // FRESCOR DO ÂNGULO: registra a abertura pra não repetir o mesmo tipo de gancho (só quando não foi gancho travado)
     if (!chosen) { try { const op = roteiro.split(/\n|(?<=[.?!])\s/)[0].replace(/\*\*/g, "").trim(); if (op.length > 14) await addFreshness(op.slice(0, 70)); } catch {} }
-    return Response.json({ roteiro, tells, cleaned, usage: res.usage });
+    return Response.json({ roteiro, tells, cleaned, voiceScore, voiceIssues, regenerated, usage: res.usage });
   } catch (e: unknown) {
     return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }

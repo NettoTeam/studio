@@ -89,6 +89,26 @@ export async function setGold(arr: GoldExample[]): Promise<void> {
   if (error) console.error("setGold", error.message);
 }
 
+// ---- GANCHOS-OURO: capas aprovadas pelo Cândido (a IA usa como régua de capa forte) ----
+export interface HookGold { capa: string; createdAt: string }
+export async function getGoldHooks(): Promise<HookGold[]> {
+  const { data } = await sb.from("kv").select("value").eq("key", "gold_hooks").maybeSingle();
+  return (data?.value as HookGold[]) || [];
+}
+export async function addGoldHook(capa: string): Promise<void> {
+  const cur = await getGoldHooks();
+  const clean = (capa || "").replace(/\*\*/g, "").trim().slice(0, 200);
+  if (!clean || cur.some((h) => h.capa === clean)) return; // sem duplicata
+  cur.unshift({ capa: clean, createdAt: new Date().toISOString() });
+  const { error } = await sb.from("kv").upsert({ key: "gold_hooks", value: cur.slice(0, 80) });
+  if (error) console.error("addGoldHook", error.message);
+}
+export async function deleteGoldHook(createdAt: string): Promise<void> {
+  const cur = await getGoldHooks();
+  const { error } = await sb.from("kv").upsert({ key: "gold_hooks", value: cur.filter((h) => h.createdAt !== createdAt) });
+  if (error) console.error("deleteGoldHook", error.message);
+}
+
 // ---- ANTI-OURO: o que o Cândido REJEITOU (a IA aprende o que NÃO fazer — inverso do ouro) ----
 export type RejectKind = "pauta" | "hook" | "voice";
 export interface Reject { kind: RejectKind; text: string; registro?: string; createdAt: string }
@@ -103,6 +123,118 @@ export async function addReject(kind: RejectKind, text: string, registro?: strin
   cur.unshift({ kind, text: (text || "").slice(0, 600).trim(), registro: registro || undefined, createdAt: new Date().toISOString() });
   const { error } = await sb.from("kv").upsert({ key: "rejects", value: cur.slice(0, 60) });
   if (error) console.error("addReject", error.message);
+}
+export async function deleteReject(createdAt: string): Promise<void> {
+  const { data } = await sb.from("kv").select("value").eq("key", "rejects").maybeSingle();
+  const cur = (data?.value as Reject[]) || [];
+  const { error } = await sb.from("kv").upsert({ key: "rejects", value: cur.filter((r) => r.createdAt !== createdAt) });
+  if (error) console.error("deleteReject", error.message);
+}
+
+// ---- STORY POSTS: rascunhos, publicados e base de aprendizado ----
+export interface StoryFrame {
+  tipo?: string; mostrar?: string; texto?: string; fundo_tipo?: string;
+  posicao_texto?: string; sugestao_visual?: string;
+  figurinha?: { tipo: string; pergunta?: string; opcoes?: string[] } | null;
+  cta?: string | null;
+}
+export interface StoryPost {
+  id: string;
+  titulo: string;
+  frames: StoryFrame[];
+  dica?: string;
+  periodo?: string;          // "manha" | "tarde" | "noite" | undefined (avulso)
+  createdAt: string;
+  updatedAt: string;
+  stage: "rascunho" | "publicado" | "arquivado";
+  isBase?: boolean;          // salvo como referência de ouro para geração futura
+  feedback?: string;         // o que achei deste story depois de postar
+  engajamento?: string;      // como performou (livre: "5 DMs", "muita caixinha", etc.)
+}
+
+export async function listStoryPosts(): Promise<StoryPost[]> {
+  const { data } = await sb.from("kv").select("value").eq("key", "story_posts").maybeSingle();
+  return (data?.value as StoryPost[]) || [];
+}
+export async function upsertStoryPost(post: StoryPost): Promise<StoryPost> {
+  const cur = await listStoryPosts();
+  const idx = cur.findIndex(p => p.id === post.id);
+  if (idx >= 0) cur[idx] = { ...cur[idx], ...post, updatedAt: new Date().toISOString() };
+  else cur.unshift({ ...post, updatedAt: new Date().toISOString() });
+  const { error } = await sb.from("kv").upsert({ key: "story_posts", value: cur.slice(0, 200) });
+  if (error) console.error("upsertStoryPost", error.message);
+  return post;
+}
+export async function deleteStoryPost(id: string): Promise<void> {
+  const cur = await listStoryPosts();
+  const { error } = await sb.from("kv").upsert({ key: "story_posts", value: cur.filter(p => p.id !== id) });
+  if (error) console.error("deleteStoryPost", error.message);
+}
+
+// Posts marcados como "base" e com feedback positivo alimentam o aprendizado do gerador
+export interface StoryLearnings { updatedAt: string; n: number; summary: string }
+export async function getStoryLearnings(): Promise<StoryLearnings | null> {
+  const { data } = await sb.from("kv").select("value").eq("key", "story_learnings").maybeSingle();
+  return (data?.value as StoryLearnings) || null;
+}
+export async function setStoryLearnings(l: StoryLearnings): Promise<void> {
+  await sb.from("kv").upsert({ key: "story_learnings", value: l });
+}
+
+// ---- ESTILO DOS STORIES (referência de estilo/formato que o gerador de stories segue) ----
+// Texto livre calibrado pelos prints + arquivo base do Cândido. Editável na aba Stories.
+export async function getStoriesStyle(): Promise<string> {
+  const { data } = await sb.from("kv").select("value").eq("key", "stories_style").maybeSingle();
+  const v = data?.value as { text?: string } | null;
+  return v?.text?.trim() || "";
+}
+export async function setStoriesStyle(text: string): Promise<void> {
+  const { error } = await sb.from("kv").upsert({ key: "stories_style", value: { text: (text || "").slice(0, 8000) } });
+  if (error) console.error("setStoriesStyle", error.message);
+}
+
+// ---- REELS ----
+export type ReelFormato = "falado" | "conversa" | "pov_trend";
+export interface ReelIdea {
+  id: string;
+  titulo: string;
+  descricao: string;
+  formato: ReelFormato;
+  angulo: string;
+  dicaGravacao: string;
+  tags?: string[];
+  createdAt: string;
+  updatedAt: string;
+  stage: "novo" | "rascunho" | "gravado" | "publicado" | "descartado";
+  isBase?: boolean;
+  feedback?: string;
+  engajamento?: string;
+}
+export async function listReelIdeas(): Promise<ReelIdea[]> {
+  const { data } = await sb.from("kv").select("value").eq("key", "reel_ideas").maybeSingle();
+  return (data?.value as ReelIdea[]) || [];
+}
+export async function upsertReelIdea(idea: ReelIdea): Promise<ReelIdea> {
+  const cur = await listReelIdeas();
+  const idx = cur.findIndex(p => p.id === idea.id);
+  if (idx >= 0) cur[idx] = { ...cur[idx], ...idea, updatedAt: new Date().toISOString() };
+  else cur.unshift({ ...idea, updatedAt: new Date().toISOString() });
+  const { error } = await sb.from("kv").upsert({ key: "reel_ideas", value: cur.slice(0, 300) });
+  if (error) console.error("upsertReelIdea", error.message);
+  return idea;
+}
+export async function deleteReelIdea(id: string): Promise<void> {
+  const cur = await listReelIdeas();
+  const { error } = await sb.from("kv").upsert({ key: "reel_ideas", value: cur.filter(p => p.id !== id) });
+  if (error) console.error("deleteReelIdea", error.message);
+}
+export interface ReelLearnings { updatedAt: string; n: number; summary: string }
+export async function getReelLearnings(): Promise<ReelLearnings | null> {
+  const { data } = await sb.from("kv").select("value").eq("key", "reel_learnings").maybeSingle();
+  return (data?.value as ReelLearnings) || null;
+}
+export async function setReelLearnings(l: ReelLearnings): Promise<void> {
+  await sb.from("kv").upsert({ key: "reel_learnings", value: l });
 }
 
 // ---- OURO DE DIAGRAMAÇÃO: carrosséis cujo RITMO de layout o Cândido aprovou (ensina o fatiador) ----
@@ -198,6 +330,9 @@ export const DEFAULT_MODEL: BrainModel = {
     "Como pensar o treino de forma inteligente.",
     "Comportamentos que sabotam resultados.",
     "Confiança construída através da evolução física.",
+    "Opinião clara como combustível de comunidade — tomar posição firme sobre crença do nicho cria pertencimento real.",
+    "Frequência e desdobramento como estratégia — uma ideia vira múltiplos formatos; aparecer todo dia supera viralizar uma vez.",
+    "Alcance qualificado acima de alcance amplo — atingir as pessoas certas vale mais que atingir muitas.",
   ],
   temas: [
     "Treinamento feminino",

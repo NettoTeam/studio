@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { listPosts, getLearnings, getBrainModel, getGold, getRejects } from "@/lib/store";
 import { textOf, extractJson, pickRandom } from "@/lib/llm";
+import { GENERATION_RULES } from "@/lib/generation-rules";
 
 export const runtime = "nodejs";
 export const maxDuration = 45;
@@ -8,13 +9,14 @@ const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
 const SYS = `Você é o Cândido Netto (Team Netto @teamnetto · N² Squad @n2squad) pensando nas próximas PAUTAS de carrossel — NÃO é um estrategista de marketing de fora, é ELE.
 - Cada pauta DESDOBRA de um dos PILARES da marca (vêm na mensagem), dentro de um dos TEMAS que o Cândido domina, alinhada à GRANDE TESE e mirando o INIMIGO CULTURAL.
-- Na linha do que dá certo pra ele: confronto firme (sem agredir), quebra de mito, verdade técnica, gancho-espelho.
+- Varie sempre: confronto firme (quebra de mito, verdade técnica, gancho-espelho), MAS também OPINIÃO CLARA — "Informação educa. Opinião cria pertencimento." Tomar posição explícita sobre uma crença do nicho é o conteúdo que mais aprofunda comunidade. Das 4 pautas, ao menos 1 deve ser opinião firme (não só informação técnica).
+- DESDOBRAMENTO: se houver temas que já performaram na lista de postados, sugira pelo menos 1 pauta que desdobra aquele tema por ângulo diferente ou formato diferente.
 - NÃO repita temas já postados (vão na mensagem).
 - Use o APRENDIZADO dos dados se houver.
 
-O "angulo" é o ponto MAIS importante e onde quase todo mundo erra: ele tem que estar ESCRITO NA VOZ DO CÂNDIDO — direto, firme, sem palavrão, frase quebrada, como ELE FALARIA o gancho na frente da câmera. É a PROVOCAÇÃO de verdade, não a descrição de uma ideia.
-- PROIBIDO voz de estrategista/IA: "aborde como...", "explore o tema...", "mostre que...", "fale sobre a importância de...", "desmistifique...". Isso é descrever, não falar. ERRADO.
-- CERTO: escreve a frase que sai da boca dele. Ex (cadência, não copie o tema): "Quem te disse que agachar mais ia resolver o teu glúteo?" / "Você não tá estagnada. Você tá repetindo o treino errado há 1 ano." Imite ESSA pegada, ancorado nos exemplos de voz real que vierem na mensagem.
+O "angulo" é o ponto MAIS importante: escrito NA VOZ DO CÂNDIDO — calmo, firme, breve; palavrão só se carregar emoção real, nunca gratuito; frase quebrada, como ELE FALARIA na frente da câmera. É a PROVOCAÇÃO, não a descrição.
+- PROIBIDO voz de estrategista/IA: "aborde como...", "explore o tema...", "mostre que...", "fale sobre a importância de...". Isso é descrever, não falar.
+- CERTO: a frase que sai da boca dele. Ex: "Quem te disse que agachar mais ia resolver o teu glúteo?" / "Você não tá estagnada. Você tá repetindo o treino errado há 1 ano." Imite ESSA pegada.
 
 Cada pauta: tema curto + o angulo (a provocação na voz do Cândido) + de qual pilar nasce.
 Saída: APENAS JSON {"pautas": [{"tema": string, "angulo": string, "pilar": string}]} com 4 pautas. Sem markdown.`;
@@ -43,7 +45,7 @@ export async function POST() {
       model: MODEL,
       max_tokens: 1000,
       system: SYS,
-      messages: [{ role: "user", content: `${brandBlock}${goldBlock}${rejectBlock}\n\nTemas já postados (não repetir): ${postados.length ? postados.join(", ") : "(nenhum ainda)"}\n\nAPRENDIZADO: ${learnings?.summary || "(ainda sem dados suficientes)"}\n\nMe dá 4 pautas novas, cada uma desdobrando de um pilar diferente. O "angulo" na MINHA voz direta, não em voz de marketing.` }],
+      messages: [{ role: "user", content: `${GENERATION_RULES}\n\n${brandBlock}${goldBlock}${rejectBlock}\n\nTemas já postados (não repetir): ${postados.length ? postados.join(", ") : "(nenhum ainda)"}\n\nAPRENDIZADO: ${learnings?.summary || "(ainda sem dados suficientes)"}\n\nMe dá 4 pautas novas, cada uma desdobrando de um pilar diferente. O "angulo" na MINHA voz direta, não em voz de marketing.` }],
     });
     const json = JSON.parse(extractJson(textOf(res)));
     return Response.json({ pautas: json.pautas || [], usage: res.usage });

@@ -15,7 +15,13 @@ function sample(style: Partial<Card>): Card {
 export default function KitPage() {
   const [kits, setKits] = useState<Kit[]>([]);
   const [ready, setReady] = useState(false);
-  useEffect(() => { try { setKits(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {} setReady(true); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try { setKits(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}
+      setReady(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const persist = (list: Kit[]) => { setKits(list); try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {} };
   const rename = (i: number) => { const nv = prompt("Novo nome do kit:", kits[i].name); if (nv) persist(kits.map((k, idx) => (idx === i ? { ...k, name: nv.trim() } : k))); };
   const del = (i: number) => { if (confirm(`Excluir o kit "${kits[i].name}"?`)) persist(kits.filter((_, idx) => idx !== i)); };

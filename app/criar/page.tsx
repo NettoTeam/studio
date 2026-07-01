@@ -11,6 +11,7 @@ import { toast } from "@/lib/toast";
 import CardEditor from "@/components/CardEditor";
 import { SAMPLE } from "@/lib/sample";
 import type { Carousel, Card } from "@/lib/types";
+import { cardElementDefs, resolveCardElement } from "@/lib/card-elements";
 
 // quão diferente a versão editada ficou do rascunho da IA (0 = igual, ~1 = reescrito).
 // jaccard de palavras: barato e bom o suficiente pra detectar "edição de verdade".
@@ -23,6 +24,14 @@ function editRatio(a: string, b: string): number {
   return 1 - common / Math.max(wa.length, wb.length);
 }
 
+function plainCardText(s?: string): string {
+  return (s || "")
+    .replace(/(\*\*|==|__|~~|\+\+)/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 export default function CriarPage() {
   const [carousel, setCarousel] = useState<Carousel>({ tema: "", cards: [] });
   const [content, setContent] = useState("");
@@ -31,6 +40,7 @@ export default function CriarPage() {
   const [emotions, setEmotions] = useState<string[]>([]); // emoções primais do gancho
   const [hook, setHook] = useState(""); // tipo de gancho
   const [registro, setRegistro] = useState<Registro | "">(""); // Sinais Vitais — o tom do post (gira ANTES, a IA escreve nele)
+  const [funil, setFunil] = useState<"" | "topo" | "meio" | "fundo">(""); // etapa do funil de marketing
   const [correlation, setCorrelation] = useState(""); // ponte escolhida (gancho por correlação)
   const [corrCands, setCorrCands] = useState<{ title: string; snippet?: string; comoConecta?: string; url: string; usado?: boolean }[]>([]);
   const [corrLoad, setCorrLoad] = useState(false);
@@ -87,6 +97,28 @@ export default function CriarPage() {
   const [hooksLoad, setHooksLoad] = useState(false);
   const [chosenHook, setChosenHook] = useState(""); // abertura travada (alimenta o roteiro)
   const [chosenCover, setChosenCover] = useState(""); // capa travada — vai VERBATIM pro card 1 (o cards não destila)
+  // Gerador de temas — 20 temas com 2 capas cada, minerando cérebro + livros
+  type Tema = { tema: string; hook1: string; hook2: string; pilar: string };
+  const [temas, setTemas] = useState<Tema[]>([]);
+  const [temasLoad, setTemasLoad] = useState(false);
+  const [temasOpen, setTemasOpen] = useState(false);
+  async function genTemas() {
+    setTemasLoad(true); setTemasOpen(true);
+    try {
+      const r = await fetch("/api/temas", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "erro ao gerar temas");
+      setTemas(d.temas || []);
+    } catch (e) { toast(e instanceof Error ? e.message : String(e), "err"); setTemasOpen(false); }
+    finally { setTemasLoad(false); }
+  }
+  function chooseTema(t: Tema, hook?: string) {
+    setContent(t.tema);
+    if (hook) { setChosenCover(hook); }
+    setHooks([]); setOrigHooks([]); setRoteiro(""); setAiDraft(""); setChosenHook("");
+    setTemasOpen(false);
+    setStage("texto");
+  }
   const [caption, setCaption] = useState(false);
   const [legenda, setLegenda] = useState("");
   const [outline, setOutline] = useState(""); // esqueleto gerado — vira estrutura-ouro
@@ -96,6 +128,9 @@ export default function CriarPage() {
   const [cardsLoad, setCardsLoad] = useState(false);
   const [tells, setTells] = useState<string[]>([]); // possíveis "caras de IA" detectadas no roteiro
   const [cleaned, setCleaned] = useState(false); // o Escritor autolimpou tells antes de mostrar
+  const [voiceScore, setVoiceScore] = useState<number | null>(null); // juiz de voz (Tier 3): 0-100
+  const [voiceIssues, setVoiceIssues] = useState<string[]>([]);
+  const [regenerated, setRegenerated] = useState(false); // o juiz regenerou pra subir a nota
   // editor do roteiro: campo NÃO-controlado sincronizado por ref. Evita o pulo do cursor pro fim
   // (re-render do React durante a digitação de acentos do português reposicionava o caret).
   const roteiroRef = useRef<HTMLTextAreaElement | null>(null);
@@ -125,9 +160,28 @@ export default function CriarPage() {
   const [exporting, setExporting] = useState(false); // nós full-size montados só durante o export
   const refs = useRef<(HTMLDivElement | null)[]>([]);
   const dragTarget = useRef<string | null>(null); // "focal" | "logo" | "ov-<i>"
+  const dragStart = useRef<{ key: string; x: number; y: number; focalX?: number; focalY?: number } | null>(null);
   // posição REAL (medida) de título/corpo/texto pra colar as alças no conteúdo (como o nick/logo)
   const previewRef = useRef<HTMLDivElement>(null);
-  const [hbase, setHbase] = useState<{ title?: { x: number; y: number }; body?: { x: number; y: number }; text?: { x: number; y: number } }>({});
+  const editorStageRef = useRef<HTMLDivElement>(null);
+  const [hbase, setHbase] = useState<{ title?: { x: number; y: number }; body?: { x: number; y: number }; text?: { x: number; y: number }; signoff?: { x: number; y: number }; kicker?: { x: number; y: number } }>({});
+  // limpa o rascunho INTEIRO — tela nova (o que já foi pro Quadro/Vault continua salvo lá)
+  function clearAll() {
+    setContent(""); setRoteiro(""); setAiDraft(""); setHooks([]); setOrigHooks([]);
+    setChosenHook(""); setChosenCover(""); setCarousel({ tema: "", cards: [] }); setLegenda("");
+    setRegistro(""); setHook(""); setEmotions([]); setCorrelation(""); setCorrCands([]);
+    setInlineSrc(""); setInlineName(""); setTells([]); setCleaned(false); setVoiceScore(null); setVoiceIssues([]); setRegenerated(false); setSelected(null);
+    setOutline(""); setStage("texto");
+    try { localStorage.removeItem("dg_draft"); } catch {}
+  }
+  useEffect(() => {
+    if (selected == null || stage !== "carrossel") return;
+    if (!window.matchMedia("(max-width: 760px)").matches) return;
+    const id = window.setTimeout(() => {
+      editorStageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+    return () => window.clearTimeout(id);
+  }, [selected, stage]);
   useLayoutEffect(() => {
     let alive = true;
     const commit = (next: typeof hbase) => {
@@ -146,9 +200,22 @@ export default function CriarPage() {
       const r = el.getBoundingClientRect();
       return { x: (r.left + r.width / 2 - fr.left) / fr.width, y: (r.top + r.height / 2 - fr.top) / fr.height };
     };
-    const titleC = center(frame.querySelector("h1, h2"));
-    const bodyC = center(frame.querySelector('[data-mv="body"]'));
-    const nb: { title?: { x: number; y: number }; body?: { x: number; y: number }; text?: { x: number; y: number } } = {};
+    const findTextEl = (text?: string) => {
+      const wanted = plainCardText(text);
+      if (!wanted) return null;
+      const nodes = Array.from(frame.querySelectorAll(".create-preview-inner *")) as HTMLElement[];
+      return nodes
+        .filter((el) => {
+          const got = plainCardText(el.textContent || "");
+          return got === wanted || got.includes(wanted);
+        })
+        .sort((a, b) => (a.textContent || "").length - (b.textContent || "").length)[0] || null;
+    };
+    const titleC = center(findTextEl(c.headline) || frame.querySelector("h1, h2"));
+    const bodyC = center(findTextEl(c.body) || frame.querySelector('[data-mv="body"]'));
+    const signoffC = center(findTextEl(c.signoff) || frame.querySelector('[data-mv="signoff"]'));
+    const kickerC = center(frame.querySelector('[data-mv="kicker"]'));
+    const nb: { title?: { x: number; y: number }; body?: { x: number; y: number }; text?: { x: number; y: number }; signoff?: { x: number; y: number }; kicker?: { x: number; y: number } } = {};
     if (c.headline && c.body) {
       if (titleC) nb.title = { x: titleC.x - (c.titleX || 0), y: titleC.y - (c.titleY || 0) };
       if (bodyC) nb.body = { x: bodyC.x - (c.bodyX || 0), y: bodyC.y - (c.bodyY || 0) };
@@ -156,6 +223,8 @@ export default function CriarPage() {
       const m = titleC || bodyC;
       if (m) nb.text = { x: m.x - (c.textX || 0), y: m.y - (c.textY || 0) };
     }
+    if (signoffC) nb.signoff = { x: signoffC.x - (c.signoffX || 0), y: signoffC.y - (c.signoffY || 0) };
+    if (kickerC) nb.kicker = { x: kickerC.x - (c.kickerX || 0), y: kickerC.y - (c.kickerY || 0) };
     commit(nb);
     return () => { alive = false; };
   }, [selected, carousel]);
@@ -185,6 +254,7 @@ export default function CriarPage() {
           if (typeof d?.correlation === "string") setCorrelation(d.correlation);
           if (typeof d?.inlineSrc === "string") setInlineSrc(d.inlineSrc);
           if (typeof d?.inlineName === "string") setInlineName(d.inlineName);
+          if (d?.funil === "topo" || d?.funil === "meio" || d?.funil === "fundo") setFunil(d.funil);
         }
       } catch {}
       // aplica a INTENÇÃO vinda de outra tela (Hoje/Quadro/Calendário/Marca/Vault), sobrepondo o rascunho
@@ -214,19 +284,22 @@ export default function CriarPage() {
     if (!hydrated.current) return; // não grava antes de restaurar (evita sobrescrever com vazio)
     const t = setTimeout(() => {
       try {
-        localStorage.setItem("dg_draft", JSON.stringify({ carousel, legenda, roteiro, content, nCards, registro, hook, emotions, caption, chosenHook, chosenCover, correlation, inlineSrc, inlineName }));
+        localStorage.setItem("dg_draft", JSON.stringify({ carousel, legenda, roteiro, content, nCards, registro, hook, emotions, caption, chosenHook, chosenCover, correlation, inlineSrc, inlineName, funil }));
         setSavedAt(Date.now());
       } catch {}
     }, 500); // debounce: grava 0,5s após a última alteração
     return () => clearTimeout(t);
-  }, [carousel, legenda, roteiro, content, nCards, registro, hook, emotions, caption, chosenHook, chosenCover, correlation, inlineSrc, inlineName]);
+  }, [carousel, legenda, roteiro, content, nCards, registro, hook, emotions, caption, chosenHook, chosenCover, correlation, inlineSrc, inlineName, funil]);
 
   // histórico (desfazer/refazer)
   const past = useRef<Carousel[]>([]);
   const future = useRef<Carousel[]>([]);
   const skipHist = useRef(false);
   const prevCar = useRef<Carousel>(carousel);
-  const [, bump] = useState(0);
+  const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
+  function syncHistoryState() {
+    setHistoryState({ canUndo: past.current.length > 0, canRedo: future.current.length > 0 });
+  }
   useEffect(() => {
     if (skipHist.current) { skipHist.current = false; prevCar.current = carousel; return; }
     if (prevCar.current !== carousel) {
@@ -234,7 +307,7 @@ export default function CriarPage() {
       if (past.current.length > 60) past.current.shift();
       future.current = [];
       prevCar.current = carousel;
-      bump((n) => n + 1);
+      syncHistoryState();
     }
   }, [carousel]);
   function undo() {
@@ -242,21 +315,21 @@ export default function CriarPage() {
     const prev = past.current.pop()!;
     future.current.push(prevCar.current);
     skipHist.current = true; prevCar.current = prev;
-    setCarousel(prev); bump((n) => n + 1);
+    setCarousel(prev); syncHistoryState();
   }
   function redo() {
     if (!future.current.length) return;
     const next = future.current.pop()!;
     past.current.push(prevCar.current);
     skipHist.current = true; prevCar.current = next;
-    setCarousel(next); bump((n) => n + 1);
+    setCarousel(next); syncHistoryState();
   }
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       const k = e.key.toLowerCase();
-      if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+      if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
       else if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); redo(); }
     }
     window.addEventListener("keydown", onKey);
@@ -433,6 +506,8 @@ export default function CriarPage() {
       if (!Array.isArray(d.hooks) || !d.hooks.length) throw new Error("a IA não devolveu ganchos — tenta de novo");
       setHooks(d.hooks);
       setOrigHooks(d.hooks.map((h: { capa: string; abertura: string }) => ({ ...h })));
+      // Aviso suave — ganchos disponíveis mas com tiques detectados (não bloqueia)
+      if (d.tells_warning) setErr("⚠ alguns tiques detectados (revisa antes de usar): " + d.tells_warning);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setHooksLoad(false); }
   }
@@ -476,15 +551,6 @@ export default function CriarPage() {
     } catch { toast("erro ao guardar", "err"); }
   }
 
-  // limpa o rascunho INTEIRO — tela nova (o que já foi pro Quadro/Vault continua salvo lá)
-  function clearAll() {
-    setContent(""); setRoteiro(""); setAiDraft(""); setHooks([]); setOrigHooks([]);
-    setChosenHook(""); setChosenCover(""); setCarousel({ tema: "", cards: [] }); setLegenda("");
-    setRegistro(""); setHook(""); setEmotions([]); setCorrelation(""); setCorrCands([]);
-    setInlineSrc(""); setInlineName(""); setTells([]); setCleaned(false); setSelected(null);
-    setOutline(""); setStage("texto");
-    try { localStorage.removeItem("dg_draft"); } catch {}
-  }
   function novoConteudo() {
     const temAlgo = content.trim() || roteiro.trim() || carousel.cards.length || hooks.length;
     if (temAlgo && !confirm("Começar do zero? Isso limpa o conteúdo, o roteiro e o carrossel atuais desta tela; o que você já guardou no Quadro/Vault continua lá")) return;
@@ -498,7 +564,7 @@ export default function CriarPage() {
     try {
       const r = await fetch("/api/roteiro", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, hook, emotions, correlation, inlineSource: inlineSrc, registro: registro || undefined, chosenHook: chosenHook || undefined }),
+        body: JSON.stringify({ content, hook, emotions, correlation, inlineSource: inlineSrc, registro: registro || undefined, chosenHook: chosenHook || undefined, funil: funil || undefined }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Erro");
@@ -506,6 +572,9 @@ export default function CriarPage() {
       setAiDraft(d.roteiro || ""); // guarda o original pra comparar com a tua edição depois
       setTells(d.tells || []);
       setCleaned(!!d.cleaned);
+      setVoiceScore(typeof d.voiceScore === "number" ? d.voiceScore : null);
+      setVoiceIssues(d.voiceIssues || []);
+      setRegenerated(!!d.regenerated);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally { setRoteiroLoad(false); }
@@ -598,8 +667,64 @@ export default function CriarPage() {
           </div>
 
           {stage === "texto" && (<>
+          {/* ── GERADOR DE TEMAS ── */}
+          <div className="studio-section studio-section--pad" style={{ paddingBottom: temasOpen ? 0 : 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button onClick={temasOpen && temas.length ? () => setTemasOpen(false) : genTemas}
+                disabled={temasLoad}
+                className="dg-btn-primary"
+                style={{ fontSize: 13, padding: "8px 18px", opacity: temasLoad ? 0.7 : 1 }}>
+                {temasLoad ? "⏳ Minerando cérebro + livros…" : temasOpen && temas.length ? "✕ fechar temas" : "✨ Gerar 20 Temas"}
+              </button>
+              {temas.length > 0 && !temasOpen && (
+                <button onClick={() => setTemasOpen(true)} style={{ fontSize: 12, color: "#7c869c", background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                  ver os {temas.length} temas gerados
+                </button>
+              )}
+              <span style={{ fontSize: 11, color: "#5a6378", marginLeft: 4 }}>— minera livros, fontes e cérebro · gera capa no padrão aprovado</span>
+            </div>
+
+            {temasOpen && (
+              <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10, paddingBottom: 14 }}>
+                {temasLoad && !temas.length && (
+                  <div style={{ gridColumn: "1/-1", color: "#7c869c", fontSize: 13, padding: "20px 0" }}>analisando livros e cérebro…</div>
+                )}
+                {temas.map((t, i) => (
+                  <div key={i} style={{ background: "#17171b", border: "1px solid #2e2e36", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+                    {/* pilar badge */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 10, background: "#1e2030", color: "#7c8db0", borderRadius: 5, padding: "2px 7px", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{t.pilar}</span>
+                    </div>
+                    {/* tema */}
+                    <p style={{ fontSize: 12.5, color: "#bdc4d4", lineHeight: 1.5, margin: 0 }}>{t.tema}</p>
+                    {/* capas */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5, borderTop: "1px solid #2a2a36", paddingTop: 8 }}>
+                      {[t.hook1, t.hook2].map((h, hi) => (
+                        <div key={hi} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 11, color: "#5a6378", minWidth: 14 }}>{hi + 1}.</span>
+                          <span style={{ flex: 1, fontSize: 13, color: "#e8d5b7", fontWeight: 600, lineHeight: 1.3 }}
+                            dangerouslySetInnerHTML={{ __html: h.replace(/\*\*([^*]+)\*\*/g, '<span style="color:#e85d6a">$1</span>') }} />
+                          <button onClick={() => chooseTema(t, h.replace(/\*\*/g, ""))}
+                            title="Usa este tema com esta capa já pré-selecionada"
+                            style={{ fontSize: 11, background: "#0e1420", color: "#7c8db0", border: "1px solid #2a3a5a", borderRadius: 6, padding: "3px 9px", cursor: "pointer", whiteSpace: "nowrap" }}>
+                            usar
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    {/* usar tema sem capa pre-selecionada */}
+                    <button onClick={() => chooseTema(t)}
+                      style={{ fontSize: 11.5, background: "transparent", color: "#5a6a8a", border: "1px dashed #2e3a50", borderRadius: 7, padding: "5px 0", cursor: "pointer", marginTop: 2 }}>
+                      → usar tema (gerar capas depois)
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="studio-section studio-section--pad create-compose" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Cola aqui o conteúdo bruto"
+            <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Cola aqui o conteúdo bruto — ou escolhe um tema acima"
               className="dg-input" style={{ width: "100%", height: 130, fontSize: 15, resize: "vertical" }} />
 
             {/* TOM (registro — Sinais Vitais). Gira ANTES; a IA escreve neste tom. */}
@@ -620,6 +745,30 @@ export default function CriarPage() {
                 })}
               </div>
               {!registro && <div style={{ fontSize: 10.5, color: "#7c869c", marginTop: 6 }}>sem tom = a IA decide o registro pelo conteúdo</div>}
+            </div>
+
+            {/* ETAPA DO FUNIL */}
+            <div className="dg-box create-control-card" style={{ padding: 10 }}>
+              <div className="dg-kicker" style={{ marginBottom: 6 }}>📣 Etapa do funil <span style={{ color: "#7c869c", textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>— a IA adapta o objetivo do post</span></div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {([
+                  { id: "topo", emoji: "🔍", label: "Topo", desc: "atrair atenção", detail: "Descoberta · alcance · curiosidade · viral", color: "#22c55e" },
+                  { id: "meio", emoji: "📚", label: "Meio", desc: "construir autoridade", detail: "Educação · confiança · método · profundidade", color: "#3b82f6" },
+                  { id: "fundo", emoji: "🎯", label: "Fundo", desc: "gerar conversão", detail: "Decisão · provas · quebra de objeções · CTA", color: "#ef476f" },
+                ] as const).map((f) => {
+                  const on = funil === f.id;
+                  return (
+                    <button key={f.id} onClick={() => setFunil(on ? "" : f.id)}
+                      style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, fontSize: 13, padding: "8px 14px", borderRadius: 9, cursor: "pointer", flex: "1 1 140px",
+                        background: on ? f.color + "18" : "#17171b", color: on ? f.color : "#9aa0b0",
+                        border: "1px solid " + (on ? f.color : "#2e2e36"), fontWeight: on ? 700 : 500 }}>
+                      <span>{f.emoji} {f.label}{on ? " ✓" : ""} <span style={{ fontWeight: 400, fontSize: 11.5 }}>— {f.desc}</span></span>
+                      <span style={{ fontSize: 10.5, color: on ? f.color + "cc" : "#5a6378", fontWeight: 400 }}>{f.detail}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {!funil && <div style={{ fontSize: 10.5, color: "#7c869c", marginTop: 6 }}>sem etapa = a IA decide o foco pelo conteúdo</div>}
             </div>
 
             {/* opções */}
@@ -740,9 +889,14 @@ export default function CriarPage() {
                         <textarea value={h.abertura} onChange={(e) => setHookField(i, "abertura", e.target.value)} rows={3}
                           style={{ width: "100%", background: "transparent", color: "#bdc4d4", border: "1px solid transparent", borderRadius: 6, padding: "3px 5px", fontSize: 12.5, lineHeight: 1.5, resize: "vertical", fontFamily: "inherit" }}
                           onFocus={(e) => (e.currentTarget.style.border = "1px solid #2e2e36")} onBlur={(e) => (e.currentTarget.style.border = "1px solid transparent")} />
-                        <div style={{ display: "flex", gap: 8, marginTop: 9, alignItems: "center" }}>
+                        <div style={{ display: "flex", gap: 8, marginTop: 9, alignItems: "center", flexWrap: "wrap" }}>
                           <button onClick={lock} className="dg-btn-primary" style={{ fontSize: 12, padding: "5px 13px" }}>✓ usar este</button>
                           <button onClick={() => saveHookAsIdea(i)} title="Salva este gancho no Quadro (Ideias) pra gerar o carrossel depois" style={{ fontSize: 12, background: "#17171b", color: "#cfcfcf", border: "1px dashed #4a5a7a", borderRadius: 7, padding: "5px 13px", cursor: "pointer" }}>+ Quadro (salvar pra depois)</button>
+                          <button onClick={() => {
+                            const capa = (h.capa || "").replace(/\*\*/g, "").trim();
+                            fetch("/api/hooks-gold", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ capa }) }).catch(() => {});
+                            toast("⭐ capa salva como gancho-ouro — a IA vai imitar esse padrão");
+                          }} title="Salva a CAPA como gancho-ouro — a IA aprende esse padrão pra gerar capas mais fortes no futuro" style={{ fontSize: 12, background: "#17171b", color: "#e8c97a", border: "1px solid #4a3d1a", borderRadius: 7, padding: "5px 13px", cursor: "pointer" }}>⭐ gancho-ouro</button>
                           <span style={{ flex: 1 }} />
                           <button onClick={() => {
                             fetch("/api/reject", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "hook", text: `${(h.capa || "").replace(/\*\*/g, "")} | ${(h.abertura || "").replace(/\*\*/g, "")}`, registro: registro || undefined }) }).catch(() => {});
@@ -795,20 +949,20 @@ export default function CriarPage() {
                   <select value={genStyle} onChange={(e) => setGenStyle(e.target.value)}
                     style={{ background: "#17171b", color: "#f5f5f5", border: "1px solid #2e2e36", borderRadius: 8, padding: "7px 9px", fontSize: 13 }}>
                     <option value="layout1">Layout 1 (clássico)</option>
-                    <option value="layout2">Layout 2 (editorial · 7 cards)</option>
-                    <option value="layout3">Layout 3 (storytelling · 5 cards)</option>
-                    <option value="layout4">Layout 4 (revista · 8 cards)</option>
-                    <option value="layout5">Layout 5 (minimalista · 8 cards)</option>
-                    <option value="layout6">Layout 6 (manifesto · 6 cards)</option>
-                    <option value="layout7">Layout 7 (científico · 9 cards)</option>
-                    <option value="layout8">Layout 8 (80/20 · 5 cards)</option>
-                    <option value="layout9">Layout 9 (minimalista · 6 cards)</option>
-                    <option value="layout10">Layout 10 (vinho premium · 8 cards)</option>
+                    <option value="layout2">Layout 2 (editorial)</option>
+                    <option value="layout3">Layout 3 (storytelling)</option>
+                    <option value="layout4">Layout 4 (revista)</option>
+                    <option value="layout5">Layout 5 (minimalista)</option>
+                    <option value="layout6">Layout 6 (manifesto)</option>
+                    <option value="layout7">Layout 7 (científico)</option>
+                    <option value="layout8">Layout 8 (80/20)</option>
+                    <option value="layout9">Layout 9 (minimalista)</option>
+                    <option value="layout10">Layout 10 (vinho premium)</option>
                   </select>
                 </label>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#cfcfcf", fontSize: 13, opacity: genStyle === "layout1" ? 1 : 0.4 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#cfcfcf", fontSize: 13 }}>
                   Nº de cards
-                  <input type="number" min={3} max={12} value={nCards} disabled={genStyle !== "layout1"} onChange={(e) => setNCards(Number(e.target.value))}
+                  <input type="number" min={3} max={12} value={nCards} onChange={(e) => setNCards(Number(e.target.value))}
                     style={{ width: 60, background: "#17171b", color: "#f5f5f5", border: "1px solid #2e2e36", borderRadius: 8, padding: "7px 9px" }} />
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#cfcfcf", fontSize: 13 }}>
@@ -817,6 +971,13 @@ export default function CriarPage() {
                 <button onClick={() => navigator.clipboard.writeText(roteiro)} className="dg-btn" style={{ fontSize: 13 }}>copiar roteiro</button>
                 <span style={{ fontSize: 12, color: "#7c869c" }}>{roteiro.trim().split(/\s+/).length} palavras</span>
               </div>
+              {voiceScore != null && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #2e2e36", display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                  <span title="juiz de voz: quão parecido com a sua escrita real (comparado aos seus exemplos-ouro)" style={{ fontSize: 12.5, fontWeight: 600, flexShrink: 0, color: voiceScore >= 80 ? "#7bbf6a" : voiceScore >= 65 ? "#e8c860" : "#e0738c" }}>🎯 voz: {voiceScore}/100{regenerated ? " · regenerei pra subir" : ""}</span>
+                  {voiceIssues.length > 0 && <span style={{ fontSize: 12, color: "#cfcfcf" }}>{voiceIssues.join(" · ")}</span>}
+                  {voiceScore < 80 && <span style={{ fontSize: 11, color: "#7c869c" }}>(quanto mais exemplos seus no Cérebro, mais alto isso fica)</span>}
+                </div>
+              )}
               {cleaned && (
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #2e2e36", display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
                   <span style={{ fontSize: 12.5, color: "#7bbf6a" }}>🧹 autolimpei algumas caras-de-IA antes de te mostrar</span>
@@ -852,8 +1013,8 @@ export default function CriarPage() {
               <span style={{ flex: 1 }} />
               {savedAt && (carousel.cards.length > 0 || legenda || roteiro) && <span style={{ color: "#5a6378", fontSize: 12 }} title="rascunho salvo no navegador — sobrevive ao F5">💾 salvo automático</span>}
               {saveMsg && <span style={{ color: "#7ed957", fontSize: 13 }}>{saveMsg}</span>}
-              <button className="dg-btn" onClick={undo} disabled={!past.current.length} style={{ padding: "8px 14px" }} title="Desfazer (Ctrl+Z)">↶ desfazer</button>
-              <button className="dg-btn" onClick={redo} disabled={!future.current.length} style={{ padding: "8px 14px" }} title="Refazer (Ctrl+Y)">↷ refazer</button>
+              <button className="dg-btn" onClick={undo} disabled={!historyState.canUndo} style={{ padding: "8px 14px" }} title="Desfazer (Ctrl+Z)">↶ desfazer</button>
+              <button className="dg-btn" onClick={redo} disabled={!historyState.canRedo} style={{ padding: "8px 14px" }} title="Refazer (Ctrl+Y)">↷ refazer</button>
             </div>
 
           {draftsOpen && (
@@ -903,56 +1064,109 @@ export default function CriarPage() {
             const sc = carousel.cards[selected];
             const hasImg = !!sc.image;
             const fx = sc.focalX ?? 0.5, fy = sc.focalY ?? 0.4;
+            const PHOTO_MIN = -4, PHOTO_MAX = 4;
+            const PHOTO_Y_MIN = -4, PHOTO_Y_MAX = 4, PHOTO_Y_DRAG_GAIN = 1.35;
             const lg = sc.logo;
-            const showLogo = !lg?.hide && sc.layout !== "moral" && !/^l[2-8]-/.test(sc.layout);
+            const showLogo = !lg?.hide && sc.layout !== "moral" && !/^l[2-9]-/.test(sc.layout) && !/^l10-/.test(sc.layout);
             const lx = lg?.x ?? 0.06, ly = lg?.y ?? 0.05;
             const ovs = sc.overlays || [];
-            const norm = (e: React.PointerEvent) => {
+            const elementHandles = cardElementDefs(sc)
+              .map((d) => resolveCardElement(sc, d))
+              .filter((e) => !e.hidden && e.movable !== false);
+            const rawNorm = (e: React.PointerEvent) => {
               const r = e.currentTarget.getBoundingClientRect();
-              return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
+              return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
             };
-            const r2 = (n: number) => Math.round(n * 100) / 100;
+            const norm = (e: React.PointerEvent) => {
+              const p = rawNorm(e);
+              return { x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) };
+            };
+            const r2 = (n: number) => Math.round(n * 1000) / 1000;
             const apply = (e: React.PointerEvent) => {
+              // eslint-disable-next-line react-hooks/refs
               const t = dragTarget.current; if (!t) return;
+              e.preventDefault();
+              const raw = rawNorm(e);
               const { x, y } = norm(e);
               const cl = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v)); // mantém dentro do post
-              if (t === "focal") updateCard(selected, { focalX: r2(x), focalY: r2(y) });
+              if (t === "focal") {
+                // eslint-disable-next-line react-hooks/refs
+                const start = dragStart.current?.key === "focal" ? dragStart.current : null;
+                updateCard(selected, {
+                  focalX: r2(cl((start?.focalX ?? fx) + raw.x - (start?.x ?? raw.x), PHOTO_MIN, PHOTO_MAX)),
+                  focalY: r2(cl((start?.focalY ?? fy) + (raw.y - (start?.y ?? raw.y)) * PHOTO_Y_DRAG_GAIN, PHOTO_Y_MIN, PHOTO_Y_MAX)),
+                });
+              }
               else if (t === "logo") { const w = lg?.w ?? 250; updateCard(selected, { logo: { x: r2(cl(x, 0, 1 - w / 1080)), y: r2(cl(y, 0, 1 - w / 1350)), w, hide: lg?.hide ?? false } }); }
               else if (t.startsWith("lg-")) { const i = Number(t.slice(3)); const w = sc.logos?.[i]?.w ?? 200; const arr = (sc.logos || []).map((l, idx) => idx === i ? { ...l, x: r2(cl(x, 0, 1 - w / 1080)), y: r2(cl(y, 0, 1 - w / 1350)) } : l); updateCard(selected, { logos: arr }); }
               else if (t.startsWith("ov-")) { const i = Number(t.slice(3)); const arr = ovs.map((o, idx) => idx === i ? { ...o, x: r2(x), y: r2(y) } : o); updateCard(selected, { overlays: arr }); }
+              else if (t.startsWith("ci-")) { const i = Number(t.slice(3)); const arr = (sc.cardImages || []).map((ci, idx) => idx === i ? { ...ci, x: r2(cl(x, -0.2, 1.1)), y: r2(cl(y, -0.2, 1.1)) } : ci); updateCard(selected, { cardImages: arr }); }
+              else if (t.startsWith("el-")) {
+                const id = t.slice(3);
+                const el = elementHandles.find((item) => item.id === id);
+                if (!el) return;
+                const txt = el.text || el.label || "";
+                const w = el.w ?? (el.size ? txt.length * el.size * 0.5 : 160);
+                const h = el.h ?? (el.size ? el.size * 1.5 : w);
+                updateCard(selected, { elements: { ...(sc.elements || {}), [id]: { ...(sc.elements?.[id] || {}), x: r2(cl(x, 0, Math.max(0, 1 - w / 1080))), y: r2(cl(y, 0, Math.max(0, 1 - h / 1350))) } } });
+              }
               else if (t === "nick") updateCard(selected, { nickPos: { x: r2(cl(x, 0, 0.95)), y: r2(cl(y, 0, 0.95)), size: sc.nickPos?.size ?? 28 } });
-              else if (t === "text") { const b = hbase.text || { x: 0.5, y: 0.5 }; updateCard(selected, { textX: r2(cl(x, 0.08, 0.92) - b.x), textY: r2(cl(y, 0.06, 0.94) - b.y) }); }
-              else if (t === "title") { const b = hbase.title || { x: 0.5, y: 0.5 }; updateCard(selected, { titleX: r2(cl(x, 0.08, 0.92) - b.x), titleY: r2(cl(y, 0.06, 0.94) - b.y) }); }
-              else if (t === "body") { const b = hbase.body || { x: 0.5, y: 0.5 }; updateCard(selected, { bodyX: r2(cl(x, 0.08, 0.92) - b.x), bodyY: r2(cl(y, 0.06, 0.94) - b.y) }); }
+              else if (t === "text") { const b = hbase.text || { x: 0.5, y: 0.5 }; updateCard(selected, { textX: r2(cl(x, 0.02, 0.98) - b.x), textY: r2(cl(y, 0.02, 0.98) - b.y) }); }
+              else if (t === "title") { const b = hbase.title || { x: 0.5, y: 0.5 }; updateCard(selected, { titleX: r2(cl(x, 0.02, 0.98) - b.x), titleY: r2(cl(y, 0.02, 0.98) - b.y) }); }
+              else if (t === "body") { const b = hbase.body || { x: 0.5, y: 0.5 }; updateCard(selected, { bodyX: r2(cl(x, 0.02, 0.98) - b.x), bodyY: r2(cl(y, 0.02, 0.98) - b.y) }); }
+              else if (t === "signoff") { const b = hbase.signoff || { x: 0.5, y: 0.88 }; updateCard(selected, { signoffX: r2(cl(x, 0.02, 0.98) - b.x), signoffY: r2(cl(y, 0.02, 0.98) - b.y) }); }
+              else if (t === "kicker") { const b = hbase.kicker || { x: 0.5, y: 0.12 }; updateCard(selected, { kickerX: r2(cl(x, 0.02, 0.98) - b.x), kickerY: r2(cl(y, 0.02, 0.98) - b.y) }); }
             };
             const onDown = (e: React.PointerEvent) => {
-              const t = (e.target as HTMLElement).dataset?.drag;
-              if (t) dragTarget.current = t;
-              else if (hasImg) dragTarget.current = "focal";
-              else return;
-              e.currentTarget.setPointerCapture(e.pointerId); apply(e);
+              const t = (e.target as HTMLElement).closest("[data-drag]")?.getAttribute("data-drag") || (e.target as HTMLElement).dataset?.drag;
+              if (!t) return; // clique em área branca não move nada — só handles explícitos
+              dragTarget.current = t;
+              const raw = rawNorm(e);
+              dragStart.current = { key: t, x: raw.x, y: raw.y, focalX: fx, focalY: fy };
+              e.preventDefault();
+              try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+              apply(e);
+            };
+            const shortHandleLabel = (label: string) => {
+              const clean = label.replace(/^📷\s*/, "");
+              if (/índice/i.test(clean)) return "ÍNDICE";
+              if (/barra superior/i.test(clean)) return "BARRA";
+              if (/logo/i.test(clean)) return clean.replace(/^Logo/i, "LOGO").replace(/\s+(da|do|de)\s+.*/i, "");
+              if (/marcador/i.test(clean)) return "MARCA";
+              if (/rodapé/i.test(clean)) return "RODAPÉ";
+              if (/faixa/i.test(clean)) return "FAIXA";
+              if (/moldura/i.test(clean)) return "MOLDURA";
+              if (/código/i.test(clean)) return "CÓDIGO";
+              return clean;
             };
             const handle = (key: string, x: number, y: number, label: string, color: string) => (
-              <div key={key} data-drag={key} style={{ position: "absolute", left: `${x * 100}%`, top: `${y * 100}%`, transform: "translate(-50%,-50%)", background: color, color: "#fff", fontSize: 9.5, fontWeight: 700, padding: "2px 6px", borderRadius: 5, border: "1.5px solid #fff", cursor: "move", whiteSpace: "nowrap", boxShadow: "0 1px 6px rgba(0,0,0,.6)", touchAction: "none" }}>{label}</div>
+              <div key={key} data-drag={key} className="create-drag-handle" style={{ position: "absolute", left: `${x * 100}%`, top: `${y * 100}%`, transform: "translate(-50%,-50%)", background: color, color: "#fff", fontSize: 8.5, fontWeight: 800, minHeight: 21, minWidth: 28, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "2px 5px", borderRadius: 5, border: "1px solid #fff", cursor: "grab", whiteSpace: "nowrap", boxShadow: "0 1px 6px rgba(0,0,0,.62)", touchAction: "none", userSelect: "none", zIndex: 30 }}>{shortHandleLabel(label)}</div>
             );
+            const focalHandleX = Math.min(0.965, Math.max(0.035, fx));
+            const focalHandleY = Math.min(0.965, Math.max(0.035, fy));
             return (
-            <div className="create-editor-stage">
+            <div ref={editorStageRef} className="create-editor-stage">
               <div className="dg-canvas">
                 <div className="studio-section create-preview-card" style={{ padding: 14 }}>
                 <div
                   ref={previewRef}
                   onPointerDown={onDown}
                   onPointerMove={(e) => { if (dragTarget.current) apply(e); }}
-                  onPointerUp={(e) => { dragTarget.current = null; try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} }}
-                  style={{ width: 432, height: 540, overflow: "hidden", borderRadius: 12, border: "1px solid var(--dg-line)", position: "relative", cursor: hasImg ? "move" : "default", touchAction: "none", boxShadow: "0 10px 30px -18px rgba(0,0,0,.9)" }}>
-                  <div style={{ transform: "scale(0.4)", transformOrigin: "top left", pointerEvents: "none" }}>
+                  onPointerUp={(e) => { dragTarget.current = null; dragStart.current = null; try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} }}
+                  onPointerCancel={(e) => { dragTarget.current = null; dragStart.current = null; try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} }}
+                  onLostPointerCapture={() => { dragTarget.current = null; dragStart.current = null; }}
+                  className="create-preview-frame"
+                  style={{ width: "var(--create-preview-w)", height: "var(--create-preview-h)", overflow: "hidden", borderRadius: 12, border: "1px solid var(--dg-line)", position: "relative", cursor: "default", touchAction: "none", boxShadow: "0 10px 30px -18px rgba(0,0,0,.9)" }}>
+                  <div className="create-preview-inner">
                     <CarouselCard card={sc} />
                   </div>
-                  {hasImg && <div style={{ position: "absolute", left: `${fx * 100}%`, top: `${fy * 100}%`, transform: "translate(-50%,-50%)", width: 24, height: 24, borderRadius: "50%", border: "2px solid #fff", boxShadow: "0 0 0 2px rgba(0,0,0,.55)", pointerEvents: "none" }} />}
+                  {hasImg && handle("focal", focalHandleX, focalHandleY, "FOTO", "rgba(0,0,0,.78)")}
                   {sc.logos !== undefined
                     ? (sc.logos || []).map((l, i) => handle(`lg-${i}`, l.x, l.y, "LOGO " + (i + 1), "rgba(20,33,61,.95)"))
                     : (showLogo && handle("logo", lx, ly, "LOGO", "rgba(20,33,61,.95)"))}
+                  {elementHandles.map((el) => handle(`el-${el.id}`, el.x, el.y, el.label, "rgba(255,132,74,.95)"))}
                   {ovs.map((o, i) => handle(`ov-${i}`, o.x, o.y, "img", "rgba(239,71,111,.92)"))}
+                  {(sc.cardImages || []).map((ci, i) => handle(`ci-${i}`, Math.min(0.98, Math.max(0.02, ci.x)), Math.min(0.98, Math.max(0.02, ci.y)), `IMG ${i + 1}`, "rgba(239,71,111,.85)"))}
                   {sc.headline && sc.body
                     ? <>
                         {handle("title", (hbase.title ? hbase.title.x : 0.5) + (sc.titleX ?? 0), (hbase.title ? hbase.title.y : 0.5) + (sc.titleY ?? 0), "TÍTULO", "rgba(95,211,138,.92)")}
@@ -960,14 +1174,21 @@ export default function CriarPage() {
                       </>
                     : handle("text", (hbase.text ? hbase.text.x : 0.5) + (sc.textX ?? 0), (hbase.text ? hbase.text.y : 0.5) + (sc.textY ?? 0), "TEXTO", "rgba(95,211,138,.92)")}
                   {!sc.hideNick && handle("nick", sc.nickPos?.x ?? 0.06, sc.nickPos?.y ?? 0.05, "NICK", "rgba(232,200,96,.95)")}
-                  <div style={{ position: "absolute", left: 8, bottom: 8, fontSize: 10.5, color: "#fff", background: "rgba(0,0,0,.62)", padding: "3px 9px", borderRadius: 6, pointerEvents: "none" }}>🖱️ arraste a imagem, o texto, o logo, o nick ou os elementos</div>
+                  {sc.signoff && handle("signoff", (hbase.signoff ? hbase.signoff.x : 0.5) + (sc.signoffX ?? 0), (hbase.signoff ? hbase.signoff.y : 0.88) + (sc.signoffY ?? 0), "CTA", "rgba(168,115,255,.95)")}
+                  {sc.kicker && handle("kicker", Math.min(0.97, Math.max(0.03, (hbase.kicker?.x ?? 0.15) + (sc.kickerX ?? 0))), Math.min(0.97, Math.max(0.03, (hbase.kicker?.y ?? 0.7) + (sc.kickerY ?? 0))), "KICKER", "rgba(255,180,50,.95)")}
+                  <div style={{ position: "absolute", left: 8, bottom: 8, fontSize: 10.5, color: "#fff", background: "rgba(0,0,0,.62)", padding: "3px 9px", borderRadius: 6, pointerEvents: "none" }}>🖱️ arraste os handles para mover foto, texto, logo, kicker ou elementos</div>
                 </div>
-                <button onClick={() => exportOne(selected)} className="dg-btn-primary" style={{ width: "100%", marginTop: 12, padding: "11px" }}>
+                <button onClick={() => exportOne(selected)} className="dg-btn-primary create-preview-download" style={{ width: "100%", marginTop: 12, padding: "11px" }}>
                   ⬇ Baixar esta imagem
                 </button>
-                <div style={{ fontSize: 10.5, color: "var(--dg-faint)", marginTop: 7, textAlign: "center" }}>só o card {sc.index} · PNG 1080×1350</div>
+                <div className="create-preview-meta" style={{ fontSize: 10.5, color: "var(--dg-faint)", marginTop: 7, textAlign: "center" }}>só o card {sc.index} · PNG 1080×1350</div>
                 </div>
-                <button onClick={() => setSelected(null)} className="dg-btn" style={{ width: "100%", marginTop: 10, padding: "8px", fontSize: 13 }}>✕ fechar edição</button>
+                <button onClick={() => setSelected(null)} className="dg-btn create-preview-close" style={{ width: "100%", marginTop: 10, padding: "8px", fontSize: 13 }}>✕ fechar edição</button>
+              </div>
+              <div className="create-mobile-editor-actions">
+                <span>Editando {sc.index}</span>
+                <button onClick={() => exportOne(selected)} className="dg-btn-primary" type="button">⬇ Baixar</button>
+                <button onClick={() => setSelected(null)} className="dg-btn" type="button">✕ Fechar</button>
               </div>
               <CardEditor card={sc} onChange={(patch) => updateCard(selected, patch)} carousel={carousel} index={selected} onReplace={(nc) => replaceCard(selected, nc)} onApplyAll={carousel.cards.length > 1 ? applyToAll : undefined} onApplyKit={applyKit} />
             </div>
@@ -1005,19 +1226,19 @@ export default function CriarPage() {
 
           {/* PRÉVIA EM SWIPE — vê o carrossel deslizando, como no Instagram */}
           {swipe != null && carousel.cards[swipe] && (
-            <div onClick={() => setSwipe(null)} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,6,8,.93)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 }}>
-              <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <button onClick={() => setSwipe((i) => Math.max(0, (i ?? 0) - 1))} disabled={swipe === 0} className="dg-btn" style={{ fontSize: 24, padding: "12px 16px", opacity: swipe === 0 ? 0.3 : 1 }}>‹</button>
-                <div style={{ width: 1080 * 0.42, height: 1350 * 0.42, overflow: "hidden", borderRadius: 14, boxShadow: "0 24px 70px rgba(0,0,0,.75)", border: "1px solid var(--dg-line)", flexShrink: 0 }}>
-                  <div style={{ transform: "scale(0.42)", transformOrigin: "top left" }}><CarouselCard card={carousel.cards[swipe]} /></div>
+            <div onClick={() => setSwipe(null)} className="create-swipe-overlay">
+              <div onClick={(e) => e.stopPropagation()} className="create-swipe-shell">
+                <button onClick={() => setSwipe((i) => Math.max(0, (i ?? 0) - 1))} disabled={swipe === 0} className="dg-btn create-swipe-nav create-swipe-nav--prev" style={{ opacity: swipe === 0 ? 0.3 : 1 }}>‹</button>
+                <div className="create-swipe-card">
+                  <div className="create-swipe-inner"><CarouselCard card={carousel.cards[swipe]} /></div>
                 </div>
-                <button onClick={() => setSwipe((i) => Math.min(carousel.cards.length - 1, (i ?? 0) + 1))} disabled={swipe === carousel.cards.length - 1} className="dg-btn" style={{ fontSize: 24, padding: "12px 16px", opacity: swipe === carousel.cards.length - 1 ? 0.3 : 1 }}>›</button>
+                <button onClick={() => setSwipe((i) => Math.min(carousel.cards.length - 1, (i ?? 0) + 1))} disabled={swipe === carousel.cards.length - 1} className="dg-btn create-swipe-nav create-swipe-nav--next" style={{ opacity: swipe === carousel.cards.length - 1 ? 0.3 : 1 }}>›</button>
               </div>
               <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 6, marginTop: 18 }}>
                 {carousel.cards.map((_, i) => <button key={i} onClick={() => setSwipe(i)} style={{ width: i === swipe ? 24 : 8, height: 8, borderRadius: 99, border: "none", cursor: "pointer", padding: 0, background: i === swipe ? "var(--dg-red)" : "rgba(255,255,255,.3)", transition: "width .2s" }} />)}
               </div>
               <div style={{ marginTop: 12, color: "#cfcfcf", fontSize: 13 }}>{swipe + 1} / {carousel.cards.length} · use ← → · Esc fecha</div>
-              <button onClick={() => setSwipe(null)} style={{ position: "absolute", top: 18, right: 22, background: "transparent", border: "1px solid var(--dg-line)", color: "#fff", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 14 }}>✕ fechar</button>
+              <button onClick={() => setSwipe(null)} className="create-swipe-close">✕ fechar</button>
             </div>
           )}
         </div>

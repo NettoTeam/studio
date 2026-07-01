@@ -72,6 +72,8 @@ export interface Stat {
   label: string; // ex: "VOLUME DE TREINO"
 }
 
+export type TextAlign = "left" | "center" | "right" | "justify";
+
 // Imagem sobreposta ao fundo, com posição/tamanho ajustáveis (frações 0..1 do canvas).
 export interface Overlay {
   src: string;
@@ -80,6 +82,28 @@ export interface Overlay {
   width: number;          // 0..1 — largura como fração da largura do card
   color?: boolean;        // true = colorido (default P&B)
   opacity?: number;       // 0..1 (default 1)
+}
+
+// Imagem da biblioteca posicionada livremente no card (com corte opcional).
+export interface CardImage {
+  src: string;
+  x: number;       // 0..1 — ponto de ancoragem topo-esquerdo (fração da largura do card)
+  y: number;       // 0..1 — fração da altura do card
+  width: number;   // largura como fração da largura do card (ex: 0.5 = metade)
+  bw?: boolean;    // preto e branco
+  opacity?: number;
+  crop?: { x: number; y: number; w: number; h: number }; // recorte (0..1 da imagem)
+}
+
+export interface CardElementOverride {
+  hidden?: boolean;       // true = remove este elemento fixo do layout neste card
+  text?: string;          // texto editável do elemento, quando ele for textual
+  x?: number;             // posição livre no card (0..1)
+  y?: number;
+  w?: number;             // largura/tamanho base em px
+  h?: number;             // altura base em px, usado em barras/formas
+  size?: number;          // tamanho de fonte/ícone em px
+  color?: string;         // cor do elemento/decor
 }
 
 export interface Card {
@@ -91,16 +115,19 @@ export interface Card {
   bullets?: string[];
   stats?: Stat[];
   source?: string;
-  signoff?: string;       // ex: "Tamo junto."
+  signoff?: string;       // ex: "Click no link da bio"
   image?: string;         // /library/...  (resolvido pelo app a partir de imageSentiment)
   image2?: string;        // 2ª foto (usada no "depois" do layout l3-antes-depois)
   imageSentiment?: string;// chave de sentimento que a IA escolhe (ex: "foco", "superacao")
-  focalX?: number;        // 0..1
-  focalY?: number;        // 0..1
+  focalX?: number;        // enquadramento livre da imagem; 0.5 = centro
+  focalY?: number;        // enquadramento vertical livre da imagem; 0.4 = levemente acima
   scale?: number;         // zoom da imagem de fundo (1 = padrão; >1 aproxima)
   rotate?: number;        // rotação da imagem de fundo em graus (0/90/180/270)
   bw?: boolean;           // fundo em preto e branco (default true = P&B; false = colorido)
-  align?: "left" | "center"; // alinhamento do texto no card
+  imageFit?: "cover" | "contain"; // como a foto preenche o card: cover (padrão, corta bordas) ou contain (foto inteira, pode ter barras)
+  align?: TextAlign;         // legado: alinhamento geral do texto no card
+  titleAlign?: TextAlign;    // alinhamento só do título
+  bodyAlign?: TextAlign;     // alinhamento só do corpo/bullets
   titleScale?: number;    // multiplicador do tamanho do título (1 = padrão)
   bodyScale?: number;     // multiplicador do tamanho do corpo/bullets (1 = padrão)
   titleFont?: string;     // fonte do título (ex: "Anton", "Montserrat", "Inter")
@@ -109,26 +136,41 @@ export interface Card {
   bodyShadow?: number;    // intensidade da sombra do corpo (0 = sem, ~0.5 padrão)
   titleColor?: string;    // cor do título (default branco #f5f5f5)
   bodyColor?: string;     // cor do corpo/bullets (default branco #f5f5f5)
-  highlightColor?: string;// cor do destaque (**rosa** e ==caixa==) — default rosa #ef476f
+  highlightColor?: string;// cor do destaque (base para todos os elementos de marcação) — default rosa #ef476f
+  caixaColor?: string;    // cor da ==caixa== sólida (default: highlightColor ou rosa)
+  sublinhColor?: string;  // cor do __sublinhado__ (default: highlightColor ou rosa)
+  marcaColor?: string;    // cor do ~~marca-texto~~ (default: highlightColor ou rosa)
+  contornoColor?: string; // cor do ++contorno++ (default: highlightColor ou rosa)
+  kickerColor?: string;   // cor do kicker (barra + texto); default: barra=rosa, texto=cinza
+  signoffColor?: string;  // cor da assinatura/CTA (default: rosa)
   textX?: number;         // desloca o bloco de texto na horizontal (fração do card; 0 = posição padrão)
   textY?: number;         // desloca o bloco de texto na vertical (fração do card; 0 = posição padrão)
   titleX?: number;        // desloca SÓ o título (independente do corpo)
   titleY?: number;
   bodyX?: number;         // desloca SÓ o corpo/bullets (independente do título)
   bodyY?: number;
+  kickerX?: number;       // desloca SÓ o kicker na horizontal (independente do título e do corpo)
+  kickerY?: number;       // desloca SÓ o kicker na vertical
+  signoffX?: number;      // desloca SÓ assinatura/CTA
+  signoffY?: number;
+  signoffScale?: number;  // multiplicador do tamanho da assinatura/CTA
   titleTracking?: number; // espaçamento entre letras do título, em px (default 0.5)
   bodyTracking?: number;  // espaçamento entre letras do corpo, em px (default 0)
-  titleLeading?: number;  // espaçamento entre linhas do título (line-height; default ~0.9)
-  bodyLeading?: number;   // espaçamento entre linhas do corpo (line-height; default ~1.34)
-  overlays?: Overlay[];   // imagens sobrepostas ajustáveis
+  titleLeading?: number;  // espaçamento entre linhas do título (line-height; default 1.00)
+  bodyLeading?: number;   // espaçamento entre linhas do corpo (line-height; default 1.00)
+  overlays?: Overlay[];   // imagens sobrepostas ajustáveis (PNGs transparentes, por cima)
+  cardImages?: CardImage[]; // imagens da biblioteca posicionadas livremente no card
   logo?: { x: number; y: number; w?: number; hide?: boolean }; // posição da logo PADRÃO (quando logos não definido)
   logos?: { src: string; x: number; y: number; w?: number }[]; // logos escolhidas da biblioteca (até 2); [] = nenhuma; undefined = usa a padrão
+  elements?: Record<string, CardElementOverride>;              // elementos próprios do layout que agora podem ser movidos/editados/removidos
   nicks?: string[];                                              // nick(s) do Instagram exibidos no topo (Layout 2/3); até 2. undefined = usa o padrão
   hideNick?: boolean;                                            // esconde o nick do Instagram neste card
   nickPos?: { x: number; y: number; size?: number };             // posição livre do nick (substitui a posição padrão do layout)
   bg?: string;                                                   // cor de fundo sólida do card (default preto) — útil em slides sem foto
   tint?: { color: string; opacity: number };                    // sombra/tom de cor (gradiente) sobre o card
   index?: string;         // "03 / 08"
+  indexStyle?: string;    // visual do índice: "texto" | "seta" | "continua" | "swipe" | "pontos" | "tracos" | "pill" | "minimo" | "grande" | "circulo" | "barra" | "pagina"
+  overlayColor?: string;  // cor da sombra/overlay nativa do layout (default varia por layout: #14213d l2/l4/l5; #07111d l7/l8)
 }
 
 export interface Carousel {
