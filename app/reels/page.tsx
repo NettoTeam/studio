@@ -334,10 +334,19 @@ export default function ReelsPage() {
               {(() => {
                 const regAtual = REGISTROS.find(r => r.id === registro) ?? null;
                 return (
-                  <div className="stories-field reels-tom-field">
-                    <button type="button" className="reels-tom-toggle" onClick={() => setTomOpen(o => !o)}>
+                  <div className={`stories-field reels-tom-field${tomOpen ? " is-open" : ""}`}>
+                    <button
+                      type="button"
+                      className={`reels-tom-toggle${tomOpen ? " is-open" : ""}`}
+                      onClick={() => setTomOpen(o => !o)}
+                      aria-expanded={tomOpen}
+                      aria-controls="reels-tom-panel"
+                    >
                       <span className="reels-tom-toggle-left">
-                        <span className="reels-tom-toggle-label">Tom do reel</span>
+                        <span className="reels-tom-toggle-title">
+                          <span className="reels-tom-toggle-label">TOM DO REEL</span>
+                          <small>— A IA ESCREVE NAS IDEIAS NESTE REGISTRO</small>
+                        </span>
                         {regAtual ? (
                           <span className="reels-tom-active-pill" style={{ color: regAtual.color, background: regAtual.color + "22", borderColor: regAtual.color + "55" }}>
                             {regAtual.emoji} {regAtual.label}
@@ -350,7 +359,7 @@ export default function ReelsPage() {
                     </button>
 
                     {tomOpen && (
-                      <div className="reels-tom-body">
+                      <div id="reels-tom-panel" className="reels-tom-body">
                         <p className="reels-tom-hint">Seleciona um tom específico ou mantém automático (mescla todos)</p>
                         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 6 }}>
                           {/* Botão Automático */}

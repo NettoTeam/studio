@@ -3535,14 +3535,23 @@ html, body {
 .reels-tom-field { gap: 0; }
 .reels-tom-toggle {
   display: flex; align-items: center; justify-content: space-between;
-  width: 100%; padding: 9px 14px; border-radius: 10px;
+  gap: 12px; width: 100%; min-height: 56px; padding: 12px 14px; border-radius: 10px;
   background: var(--dg-sunken); border: 1px solid var(--dg-line);
   cursor: pointer; color: inherit; text-align: left;
-  transition: border-color .15s;
+  transition: border-color .15s, background .15s;
 }
-.reels-tom-toggle:hover { border-color: var(--dg-muted); }
-.reels-tom-toggle-left { display: flex; align-items: center; gap: 10px; }
-.reels-tom-toggle-label { font-size: 13px; font-weight: 500; color: var(--dg-label); }
+.reels-tom-toggle:hover,
+.reels-tom-toggle.is-open { border-color: rgba(239,71,111,.32); }
+.reels-tom-toggle.is-open { background: rgba(239,71,111,.045); }
+.reels-tom-toggle-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.reels-tom-toggle-title { display: flex; align-items: baseline; gap: 7px; min-width: min(100%, 330px); flex-wrap: wrap; }
+.reels-tom-toggle-label {
+  font-family: "Bebas Neue", sans-serif; letter-spacing: 2px; text-transform: uppercase;
+  font-size: 12px; font-weight: 700; color: var(--dg-grey);
+}
+.reels-tom-toggle-title small {
+  color: #5b6480; font-size: 10.5px; font-weight: 500; letter-spacing: 1.8px; text-transform: uppercase;
+}
 .reels-tom-auto-pill {
   font-size: 11px; padding: 2px 9px; border-radius: 20px;
   background: rgba(90,99,120,.15); border: 1px solid rgba(90,99,120,.25);
@@ -3552,8 +3561,12 @@ html, body {
   font-size: 11px; padding: 2px 9px; border-radius: 20px;
   border: 1px solid; font-weight: 600;
 }
-.reels-tom-arrow { font-size: 10px; color: var(--dg-muted); }
-.reels-tom-body { padding: 12px 2px 4px; }
+.reels-tom-arrow { font-size: 10px; color: #7a83a0; }
+.reels-tom-body {
+  margin-top: 8px; padding: 12px 14px 14px;
+  background: rgba(10,10,12,.62); border: 1px solid var(--dg-line);
+  border-radius: 10px;
+}
 .reels-tom-hint { font-size: 11px; color: #5b6480; margin-bottom: 2px; }
 
 /* Barra de ação em lote */
@@ -3693,4 +3706,3 @@ html, body {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
 }
 .reels-learn-btn { font-size: 12px; padding: 7px 14px; white-space: nowrap; }
-
