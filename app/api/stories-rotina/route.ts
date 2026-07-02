@@ -10,7 +10,7 @@ import { registroBlock } from "@/lib/vitals";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
-const MODEL = process.env.ANTHROPIC_STORIES_MODEL || "claude-sonnet-4-6";
+const MODEL = process.env.ANTHROPIC_CARDS_MODEL || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
 
 type Frame = {
   tipo?: string; mostrar?: string; texto?: string; fundo_tipo?: string;

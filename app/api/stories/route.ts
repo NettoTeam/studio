@@ -10,7 +10,7 @@ import { cleanGeneratedText } from "@/lib/generation-rules";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-const MODEL = process.env.ANTHROPIC_STORIES_MODEL || "claude-sonnet-4-6";
+const MODEL = process.env.ANTHROPIC_CARDS_MODEL || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
 
 type Frame = { tipo?: string; mostrar?: string; texto?: string; fundo_tipo?: string; posicao_texto?: string; sugestao_visual?: string; figurinha?: { tipo: string; pergunta?: string; opcoes?: string[] } | null; cta?: string | null };
 
