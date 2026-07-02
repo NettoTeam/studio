@@ -183,6 +183,7 @@ export interface Carousel {
 export interface Metrics {
   postedAt?: string;        // data da postagem
   alcance?: number;
+  visualizacoes?: number;
   salvamentos?: number;
   compartilhamentos?: number;
   comentarios?: number;

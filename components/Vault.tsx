@@ -10,6 +10,7 @@ import { toast } from "@/lib/toast";
 
 const METRIC_FIELDS: { key: keyof Metrics; label: string }[] = [
   { key: "alcance", label: "Alcance" },
+  { key: "visualizacoes", label: "Visualizações" },
   { key: "salvamentos", label: "Salvamentos" },
   { key: "compartilhamentos", label: "Compart" },
   { key: "comentarios", label: "Comentários" },
