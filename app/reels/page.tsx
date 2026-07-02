@@ -32,6 +32,12 @@ interface GeneratedIdea {
   tags?: string[];
 }
 
+interface ReelsApiResponse {
+  ideias?: GeneratedIdea[];
+  error?: string;
+  warning?: string;
+}
+
 const FORMATO_INFO: Record<ReelFormato, { label: string; color: string; bg: string; emoji: string; desc: string }> = {
   falado:    { label: "Vídeo Falado",  color: "#f59e0b", bg: "rgba(245,158,11,.12)", emoji: "🎙",  desc: "câmera + B-roll de exercícios" },
   conversa:  { label: "Conversa",      color: "#5fd38a", bg: "rgba(95,211,138,.12)",  emoji: "🏋",  desc: "academia, natural, com ou sem alguém" },
@@ -45,6 +51,17 @@ const STAGE_LABELS: Record<ReelStage, string> = {
   publicado:  "publicado",
   descartado: "descartado",
 };
+
+function friendlyGenerateError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/string did not match the expected pattern/i.test(msg)) {
+    return "A geração caiu antes de devolver as ideias. Ajustei a API para gerar em lotes menores; tenta de novo.";
+  }
+  if (/failed to fetch|load failed|network|timeout|504|aborted/i.test(msg)) {
+    return "A geração demorou demais ou a conexão caiu. Tenta de novo; agora ela roda em lotes menores.";
+  }
+  return msg || "Erro ao gerar.";
+}
 
 export default function ReelsPage() {
   // Tab
@@ -107,13 +124,22 @@ export default function ReelsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nIdeas, formatos: Array.from(formatos), contexto, funil: funil || undefined, registro: registro || undefined }),
       });
-      const d = await r.json();
+      const raw = await r.text();
+      let d: ReelsApiResponse = {};
+      try {
+        d = raw ? JSON.parse(raw) : {};
+      } catch {
+        throw new Error(r.status === 504 ? "timeout" : "O servidor respondeu fora do formato esperado.");
+      }
       if (!r.ok) throw new Error(d.error || "Erro ao gerar");
-      setIdeas(d.ideias || []);
+      if (!Array.isArray(d.ideias)) throw new Error("O servidor não devolveu ideias. Tenta gerar de novo.");
+      setIdeas(d.ideias);
+      if (d.warning) setErr(d.warning);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(friendlyGenerateError(e));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   function toggleFormato(f: ReelFormato) {

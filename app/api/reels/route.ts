@@ -3,7 +3,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import { REELS_SYSTEM, REELS_TRANSCRICOES } from "@/lib/reels";
 import { GENERATION_RULES } from "@/lib/generation-rules";
 import { textOf, pickRandom } from "@/lib/llm";
-import { detectTells } from "@/lib/tells";
 import { cleanGeneratedText } from "@/lib/generation-rules";
 import { registroBlock } from "@/lib/vitals";
 
@@ -12,6 +11,11 @@ export const maxDuration = 90;
 const MODEL = process.env.ANTHROPIC_CARDS_MODEL || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
 
 type ReelFormato = "falado" | "conversa" | "pov_trend";
+type Batch = {
+  n: number;
+  formatos: ReelFormato[];
+  focus: string;
+};
 type ReelIdea = {
   titulo: string;
   descricao: string;
@@ -26,6 +30,15 @@ const FORMATO_LABEL: Record<ReelFormato, string> = {
   conversa:  "conversa (academia, demonstrando, natural)",
   pov_trend: "pov_trend (visual, legenda, trending)",
 };
+const VALID_FORMATOS: ReelFormato[] = ["falado", "conversa", "pov_trend"];
+const BATCH_SIZE = 10;
+const BATCH_CONCURRENCY = 3;
+const BATCH_FOCUS = [
+  "execução e biomecânica aplicada",
+  "mitos, crenças erradas e opinião forte",
+  "progressão, método e bastidor da consultoria",
+  "prova social, objeções e decisão",
+];
 
 // Busca tendências reais no Exa para o formato POV/Trend
 async function buscarTendencias(exaKey: string): Promise<string> {
@@ -82,14 +95,179 @@ function tryParse(text: string): { ideias?: ReelIdea[] } | null {
   return null;
 }
 
-function cleanIdea(idea: ReelIdea): ReelIdea {
+function cleanString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function cleanIdea(idea: Partial<ReelIdea>, fallbackFormato: ReelFormato): ReelIdea | null {
+  const formato = VALID_FORMATOS.includes(idea.formato as ReelFormato) ? (idea.formato as ReelFormato) : fallbackFormato;
+  const titulo = cleanGeneratedText(cleanString(idea.titulo)) || cleanString(idea.titulo);
+  const descricao = cleanGeneratedText(cleanString(idea.descricao)) || cleanString(idea.descricao);
+  const angulo = cleanGeneratedText(cleanString(idea.angulo)) || cleanString(idea.angulo);
+  const dicaGravacao = cleanGeneratedText(cleanString(idea.dicaGravacao)) || cleanString(idea.dicaGravacao);
+  if (!titulo || !descricao || !angulo || !dicaGravacao) return null;
+
   return {
-    ...idea,
-    titulo:       cleanGeneratedText(idea.titulo) || idea.titulo,
-    descricao:    cleanGeneratedText(idea.descricao) || idea.descricao,
-    angulo:       cleanGeneratedText(idea.angulo) || idea.angulo,
-    dicaGravacao: cleanGeneratedText(idea.dicaGravacao) || idea.dicaGravacao,
+    titulo,
+    descricao,
+    formato,
+    angulo,
+    dicaGravacao,
+    tags: Array.isArray(idea.tags) ? idea.tags.map(cleanString).filter(Boolean).slice(0, 4) : [],
   };
+}
+
+function batchesFor(nIdeas: number, formatos: ReelFormato[]): Batch[] {
+  if (nIdeas <= BATCH_SIZE) {
+    return [{ n: nIdeas, formatos, focus: BATCH_FOCUS[0] }];
+  }
+
+  const counts = formatos.map((formato, idx) => ({
+    formato,
+    n: Math.floor(nIdeas / formatos.length) + (idx < nIdeas % formatos.length ? 1 : 0),
+  }));
+
+  const batches: Batch[] = [];
+  for (const { formato, n } of counts) {
+    let left = n;
+    while (left > 0) {
+      const batchN = Math.min(BATCH_SIZE, left);
+      batches.push({
+        n: batchN,
+        formatos: [formato],
+        focus: BATCH_FOCUS[batches.length % BATCH_FOCUS.length],
+      });
+      left -= batchN;
+    }
+  }
+  return batches;
+}
+
+async function mapLimited<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const index = next++;
+      try {
+        results[index] = { status: "fulfilled", value: await fn(items[index], index) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+function uniqueIdeas(ideas: ReelIdea[], limit: number): ReelIdea[] {
+  const seen = new Set<string>();
+  const out: ReelIdea[] = [];
+  for (const idea of ideas) {
+    const key = `${idea.titulo} ${idea.angulo}`.toLowerCase().replace(/\s+/g, " ").slice(0, 220);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(idea);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+function apiErrorMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/string did not match the expected pattern/i.test(msg)) {
+    return "A API recebeu algum campo fora do formato esperado. Ajustei a geração para validar os lotes antes de devolver.";
+  }
+  if (/timeout|aborted|fetch failed|network/i.test(msg)) {
+    return "A geração demorou demais ou caiu no meio. Tenta novamente.";
+  }
+  return msg || "Erro ao gerar ideias.";
+}
+
+function buildUserMsg(args: {
+  nIdeas: number;
+  formatos: ReelFormato[];
+  reguaBlock: string;
+  histBlock: string;
+  learnBlock: string;
+  goldBlock: string;
+  rejectBlock: string;
+  ctxBlock: string;
+  funilBlock: string;
+  tomBlock: string;
+  trendBlock: string;
+  focus: string;
+}) {
+  const formatosStr = args.formatos.map(f => FORMATO_LABEL[f]).join(", ");
+  const distribuicao = args.formatos.length === 1
+    ? `Todas as ${args.nIdeas} ideias devem ser no formato "${args.formatos[0]}".`
+    : `Distribui as ${args.nIdeas} ideias de forma equilibrada entre os formatos solicitados: ${args.formatos.join(", ")}.`;
+
+  return `${GENERATION_RULES}
+
+${args.reguaBlock}${args.histBlock}${args.learnBlock}${args.goldBlock}${args.rejectBlock}${args.ctxBlock}${args.funilBlock}${args.tomBlock}
+
+${REELS_TRANSCRICOES}${args.trendBlock}
+
+═══════════════════════════════════════════
+FORMATOS PARA ESTA GERAÇÃO: ${formatosStr}
+${distribuicao}
+FOCO DESTE LOTE: ${args.focus}. Não repita ideias óbvias de outros lotes.
+═══════════════════════════════════════════
+
+TAREFA: gera EXATAMENTE ${args.nIdeas} ideias de Reel para o Instagram do Cândido Netto.
+Cada ideia é um TEMA e ÂNGULO específico, não um roteiro. O Cândido vai falar do jeito dele.
+
+VARIEDADE TEMÁTICA, escolha assuntos diferentes entre si:
+• Erro de execução de exercício específico, glúteo, posterior, quadríceps, ombro etc.
+• Diferença entre exercícios parecidos que as alunas confundem
+• Mito fitness que o mercado repete, com o porquê real
+• Volume vs intensidade, um dos temas mais fortes do Cândido
+• Por que mulheres têm medo de carga e por que estão erradas
+• Bastidor da consultoria N2 Squad, como ele pensa, o que ele vê
+• Prova social, resultado de aluna com o contexto técnico do porquê funcionou
+• Progressão de carga, como fazer, por que importa mais que volume
+• Técnica avançada no momento errado
+• Treino de glúteo que na verdade vira treino de quadríceps
+• Mentalidade, disciplina, constância e intensidade no estilo darkside, sem clichê
+• POV ou trend de treino com gancho visual forte
+
+REGRAS:
+- titulo: tema direto e forte, como ele falaria na academia
+- descricao: 2-3 frases do que vai ser dito/mostrado, conteúdo real e específico
+- formato: exatamente "falado", "conversa" ou "pov_trend"
+- angulo: o gancho ou ponto de virada único que torna este reel diferente dos outros sobre o mesmo tema
+- dicaGravacao: instrução prática e específica pro formato escolhido
+- tags: 2-4 palavras-chave temáticas
+- NUNCA use travessão longo nem hífen ornamental. Frases curtas.
+- NUNCA genérico, nunca motivacional vazio. Cada ideia tem que ser específica e acionável.
+
+Devolve APENAS este JSON válido:
+{"ideias":[{"titulo":"string","descricao":"string","formato":"falado","angulo":"string","dicaGravacao":"string","tags":["string"]},...]}`;
+}
+
+async function generateBatch(anthropic: Anthropic, userMsg: string, batch: Batch): Promise<ReelIdea[]> {
+  const fallbackFormato = batch.formatos[0] || "falado";
+  let retryNote = "";
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: Math.min(3800, Math.max(1800, batch.n * 340)),
+      system: REELS_SYSTEM,
+      messages: [{ role: "user", content: userMsg + retryNote }],
+    });
+    const cand = tryParse(textOf(res)) as { ideias?: ReelIdea[] } | null;
+    if (cand?.ideias?.length) {
+      return cand.ideias
+        .map(i => cleanIdea(i as Partial<ReelIdea>, fallbackFormato))
+        .filter((i): i is ReelIdea => Boolean(i))
+        .slice(0, batch.n);
+    }
+    retryNote = `\n\nATENÇÃO: JSON inválido. Devolve JSON ESTRITAMENTE VÁLIDO com exatamente ${batch.n} ideias.`;
+  }
+
+  throw new Error("O modelo respondeu fora do formato esperado.");
 }
 
 export async function POST(req: Request) {
@@ -105,10 +283,10 @@ export async function POST(req: Request) {
   };
 
   const nIdeas = Math.min(30, Math.max(5, Math.round(body.nIdeas || 15)));
-  const formatos: ReelFormato[] = (body.formatos || ["falado", "conversa", "pov_trend"]).filter(
-    (f): f is ReelFormato => ["falado", "conversa", "pov_trend"].includes(f)
+  const formatos: ReelFormato[] = (body.formatos || VALID_FORMATOS).filter(
+    (f): f is ReelFormato => VALID_FORMATOS.includes(f)
   );
-  if (formatos.length === 0) formatos.push("falado", "conversa", "pov_trend");
+  if (formatos.length === 0) formatos.push(...VALID_FORMATOS);
   const contexto = (body.contexto || "").trim();
   const funil = body.funil || null;
   const reg = body.registro || null;
@@ -148,78 +326,46 @@ export async function POST(req: Request) {
     trendBlock = await buscarTendencias(exaKey);
   }
 
-  const formatosStr = formatos.map(f => FORMATO_LABEL[f]).join(", ");
-  const distribuicao = formatos.length === 1
-    ? `Todas as ${nIdeas} ideias devem ser no formato "${formatos[0]}".`
-    : `Distribui as ${nIdeas} ideias de forma equilibrada entre os formatos solicitados: ${formatos.join(", ")}.`;
-
-  const userMsg = `${GENERATION_RULES}
-
-${reguaBlock}${histBlock}${learnBlock}${goldBlock}${rejectBlock}${ctxBlock}${funilBlock}${tomBlock}
-
-${REELS_TRANSCRICOES}${trendBlock}
-
-═══════════════════════════════════════════
-FORMATOS PARA ESTA GERAÇÃO: ${formatosStr}
-${distribuicao}
-═══════════════════════════════════════════
-
-TAREFA: gera EXATAMENTE ${nIdeas} ideias de Reel para o Instagram do Cândido Netto.
-Cada ideia é um TEMA e ÂNGULO específico — não um roteiro. O Cândido vai falar do jeito dele.
-
-VARIEDADE TEMÁTICA (distribui entre elas — não pode repetir o mesmo assunto):
-• Erro de execução de exercício específico (glúteo, posterior, quadríceps, ombro, etc.)
-• Diferença entre exercícios parecidos que as alunas confundem
-• Mito fitness que o mercado repete — com o porquê real
-• Volume vs intensidade — um dos temas mais fortes do Cândido
-• Por que mulheres têm medo de carga (e por que estão erradas)
-• Bastidor da consultoria N2 Squad — como ele pensa, o que ele vê
-• Prova social — resultado de aluna com o contexto técnico do porquê funcionou
-• Progressão de carga — como fazer, por que importa mais que volume
-• Técnica avançada no momento errado (desespero)
-• Treino de "glúteo" que na verdade é treino de quadríceps
-• Mentalidade: disciplina, constância, intensidade — no estilo darkside, sem clichê
-• POV ou trend de treino com gancho visual forte
-
-REGRAS:
-- titulo: tema direto e forte (como ele falaria na academia, não título de slide)
-- descricao: 2-3 frases do que vai ser dito/mostrado — conteúdo real, específico
-- formato: exatamente "falado", "conversa" ou "pov_trend"
-- angulo: o gancho ou ponto de virada único que torna este reel diferente dos outros sobre o mesmo tema
-- dicaGravacao: instrução prática e específica pro formato escolhido (onde gravar, como enquadrar, o que mostrar, tom de fala)
-- tags: 2-4 palavras-chave temáticas (ex: ["técnica", "glúteo", "progressão"])
-- NUNCA use travessão longo nem hífen ornamental. Frases curtas.
-- NUNCA genérico, nunca motivacional vazio. Cada ideia tem que ser específica e acionável.
-
-Devolve APENAS este JSON válido:
-{"ideias":[{"titulo":"string","descricao":"string","formato":"falado","angulo":"string","dicaGravacao":"string","tags":["string"]},...]}`
-
   const anthropic = new Anthropic({ apiKey: key });
   try {
-    let parsed: { ideias?: ReelIdea[] } | null = null;
-    let retryNote = "";
-    for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
-      const res = await anthropic.messages.create({
-        model: MODEL, max_tokens: 6000,
-        system: REELS_SYSTEM,
-        messages: [{ role: "user", content: userMsg + retryNote }],
-      });
-      const cand = tryParse(textOf(res)) as { ideias?: ReelIdea[] } | null;
-      if (!cand) {
-        retryNote = `\n\nATENÇÃO: JSON inválido. Devolve JSON ESTRITAMENTE VÁLIDO com exatamente ${nIdeas} ideias.`;
-        continue;
-      }
-      const blob = (cand.ideias || []).map(i => `${i.titulo} ${i.descricao} ${i.angulo}`).join("\n");
-      const tells = detectTells(blob);
-      if (tells.length && attempt < 2) {
-        retryNote = `\n\nATENÇÃO: texto genérico/IA detectado (${tells.slice(0, 3).join(" | ")}). Refaz mais Cândido, mais específico, sem clichê.`;
-        continue;
-      }
-      parsed = { ideias: (cand.ideias || []).map(i => cleanIdea(i as ReelIdea)) };
-    }
-    if (!parsed?.ideias?.length) throw new Error("Não consegui gerar as ideias. Tenta de novo.");
-    return Response.json({ ideias: parsed.ideias });
+    const batches = batchesFor(nIdeas, formatos);
+    const settled = await mapLimited(batches, BATCH_CONCURRENCY, (batch) => generateBatch(
+      anthropic,
+      buildUserMsg({
+        nIdeas: batch.n,
+        formatos: batch.formatos,
+        reguaBlock,
+        histBlock,
+        learnBlock,
+        goldBlock,
+        rejectBlock,
+        ctxBlock,
+        funilBlock,
+        tomBlock,
+        trendBlock: batch.formatos.includes("pov_trend") ? trendBlock : "",
+        focus: batch.focus,
+      }),
+      batch
+    ));
+
+    const errors = settled
+      .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+      .map(r => apiErrorMessage(r.reason));
+    const generated = uniqueIdeas(
+      settled.flatMap(r => r.status === "fulfilled" ? r.value : []),
+      nIdeas
+    );
+
+    if (!generated.length) throw new Error(errors[0] || "Não consegui gerar as ideias. Tenta de novo.");
+
+    const warning = generated.length < nIdeas
+      ? `Gerei ${generated.length} de ${nIdeas} ideias porque um lote demorou ou voltou fora do formato. Pode clicar em gerar de novo para completar.`
+      : errors.length
+        ? "Um lote falhou, mas consegui gerar as ideias restantes."
+        : undefined;
+
+    return Response.json({ ideias: generated, warning });
   } catch (e: unknown) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json({ error: apiErrorMessage(e) }, { status: 500 });
   }
 }
