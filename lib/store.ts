@@ -215,13 +215,19 @@ export async function listReelIdeas(): Promise<ReelIdea[]> {
   return (data?.value as ReelIdea[]) || [];
 }
 export async function upsertReelIdea(idea: ReelIdea): Promise<ReelIdea> {
+  return (await batchUpsertReelIdeas([idea]))[0];
+}
+export async function batchUpsertReelIdeas(ideas: ReelIdea[]): Promise<ReelIdea[]> {
+  const now = new Date().toISOString();
   const cur = await listReelIdeas();
-  const idx = cur.findIndex(p => p.id === idea.id);
-  if (idx >= 0) cur[idx] = { ...cur[idx], ...idea, updatedAt: new Date().toISOString() };
-  else cur.unshift({ ...idea, updatedAt: new Date().toISOString() });
+  for (const idea of ideas) {
+    const idx = cur.findIndex(p => p.id === idea.id);
+    if (idx >= 0) cur[idx] = { ...cur[idx], ...idea, updatedAt: now };
+    else cur.unshift({ ...idea, updatedAt: now });
+  }
   const { error } = await sb.from("kv").upsert({ key: "reel_ideas", value: cur.slice(0, 300) });
-  if (error) console.error("upsertReelIdea", error.message);
-  return idea;
+  if (error) console.error("batchUpsertReelIdeas", error.message);
+  return ideas;
 }
 export async function deleteReelIdea(id: string): Promise<void> {
   const cur = await listReelIdeas();

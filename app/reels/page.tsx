@@ -167,25 +167,22 @@ export default function ReelsPage() {
     if (!toSave.length) return;
     const now = new Date().toISOString();
     const base = Date.now();
-    const saved: ReelIdea[] = [];
-    await Promise.all(toSave.map(async (idea, i) => {
-      const post: ReelIdea = {
-        id: `ri_${base}_${i}`,
-        titulo: idea.titulo,
-        descricao: idea.descricao,
-        formato: idea.formato,
-        angulo: idea.angulo,
-        dicaGravacao: idea.dicaGravacao,
-        tags: idea.tags,
-        stage: "rascunho",
-        isBase: opts.isBase || false,
-        createdAt: now,
-        updatedAt: now,
-      };
-      const r = await fetch("/api/reel-ideas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(post) });
-      const d = await r.json();
-      if (d.idea) saved.push(d.idea);
+    const batch: ReelIdea[] = toSave.map((idea, i) => ({
+      id: `ri_${base}_${i}`,
+      titulo: idea.titulo,
+      descricao: idea.descricao,
+      formato: idea.formato,
+      angulo: idea.angulo,
+      dicaGravacao: idea.dicaGravacao,
+      tags: idea.tags,
+      stage: "rascunho" as const,
+      isBase: opts.isBase || false,
+      createdAt: now,
+      updatedAt: now,
     }));
+    const r = await fetch("/api/reel-ideas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(batch) });
+    const d = await r.json();
+    const saved: ReelIdea[] = d.ideas || [];
     setDrafts(prev => [...saved, ...prev.filter(p => !saved.find(s => s.id === p.id))]);
     setSavedIdxs(prev => { const next = new Set(prev); selected.forEach(i => next.add(i)); return next; });
     setSaveMsg(opts.isBase ? `${saved.length} salvos como base ⭐` : `${saved.length} salvos em rascunhos ✓`);
