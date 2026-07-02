@@ -135,6 +135,30 @@ export default function ReelsPage() {
       if (!Array.isArray(d.ideias)) throw new Error("O servidor não devolveu ideias. Tenta gerar de novo.");
       setIdeas(d.ideias);
       if (d.warning) setErr(d.warning);
+
+      // Auto-save todas como rascunho
+      const now = new Date().toISOString();
+      const base = Date.now();
+      const batch: ReelIdea[] = d.ideias.map((idea: GeneratedIdea, i: number) => ({
+        id: `ri_${base}_${i}`,
+        titulo: idea.titulo,
+        descricao: idea.descricao,
+        formato: idea.formato,
+        angulo: idea.angulo,
+        dicaGravacao: idea.dicaGravacao,
+        tags: idea.tags,
+        stage: "rascunho" as const,
+        isBase: false,
+        createdAt: now,
+        updatedAt: now,
+      }));
+      const rs = await fetch("/api/reel-ideas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(batch) });
+      const ds = await rs.json();
+      if (ds.ideas?.length) {
+        setDrafts(prev => [...(ds.ideas as ReelIdea[]), ...prev.filter((p: ReelIdea) => !(ds.ideas as ReelIdea[]).find((s: ReelIdea) => s.id === p.id))]);
+        setSaveMsg(`${ds.ideas.length} ideias salvas em rascunho ✓`);
+        setTimeout(() => setSaveMsg(""), 4000);
+      }
     } catch (e) {
       setErr(friendlyGenerateError(e));
     } finally {
