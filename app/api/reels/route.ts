@@ -201,7 +201,7 @@ Devolve APENAS este JSON válido:
     for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
       const res = await anthropic.messages.create({
         model: MODEL, max_tokens: 6000,
-        system: [{ type: "text", text: REELS_SYSTEM, cache_control: { type: "ephemeral" } }],
+        system: REELS_SYSTEM,
         messages: [{ role: "user", content: userMsg + retryNote }],
       });
       const cand = tryParse(textOf(res)) as { ideias?: ReelIdea[] } | null;
