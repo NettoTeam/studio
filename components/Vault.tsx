@@ -13,6 +13,7 @@ const METRIC_FIELDS: { key: keyof Metrics; label: string }[] = [
   { key: "visualizacoes", label: "Visualizações" },
   { key: "salvamentos", label: "Salvamentos" },
   { key: "compartilhamentos", label: "Compart" },
+  { key: "encaminhamentos", label: "Encaminh ✈" },
   { key: "comentarios", label: "Comentários" },
   { key: "curtidas", label: "Curtidas" },
   { key: "visitasPerfil", label: "Visitas perfil" },

@@ -186,6 +186,7 @@ export interface Metrics {
   visualizacoes?: number;
   salvamentos?: number;
   compartilhamentos?: number;
+  encaminhamentos?: number;
   comentarios?: number;
   curtidas?: number;
   visitasPerfil?: number;
