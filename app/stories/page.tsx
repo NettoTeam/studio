@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { STORY_IDEAS, DAY_RHYTHM } from "@/lib/stories";
+import { ARSENAL_ORDEM, ARSENAL_CATEGORIAS, type ArsenalCategoria } from "@/lib/arsenal";
 
 type Figurinha = { tipo: string; pergunta?: string; opcoes?: string[] } | null;
 type Frame = {
@@ -280,8 +281,16 @@ export default function StoriesPage() {
   const [styleOpen, setStyleOpen] = useState(false);
   const [styleMsg, setStyleMsg]   = useState("");
 
-  // Modo principal: sequência / rotina / rascunhos
-  const [mode, setMode] = useState<"sequencia" | "rotina" | "rascunhos">("sequencia");
+  // Modo principal: sequência / rotina / arsenal / rascunhos
+  const [mode, setMode] = useState<"sequencia" | "rotina" | "arsenal" | "rascunhos">("sequencia");
+
+  // Arsenal — ciclo de 9 categorias (1 dia cada)
+  const [cicloPos, setCicloPos] = useState(0);
+  const [arsenalCtx, setArsenalCtx] = useState("");
+  const [arsenalGen, setArsenalGen] = useState<ArsenalCategoria | null>(null);
+  const [arsenalErr, setArsenalErr] = useState("");
+  const [arsenalRes, setArsenalRes] = useState<{ categoria: ArsenalCategoria; script: { dia: number; nome: string }; opcoes: RotinaOpcao[] } | null>(null);
+  const [arsenalSaveMsg, setArsenalSaveMsg] = useState("");
 
   // Rascunhos
   const [drafts, setDrafts]           = useState<StoryPost[]>([]);
@@ -320,6 +329,13 @@ export default function StoriesPage() {
   const [rotinaStarted, setRotinaStarted] = useState(false);
   const [autoSaveMsg, setAutoSaveMsg] = useState("");
   const [editorCarregado, setEditorCarregado] = useState(false);
+
+  useEffect(() => {
+    try {
+      const pos = Number(localStorage.getItem("arsenal_ciclo") || "0");
+      if (pos >= 0 && pos < ARSENAL_ORDEM.length) setCicloPos(pos);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -634,6 +650,68 @@ export default function StoriesPage() {
     }
   }
 
+  // Gera sequência do Arsenal para uma categoria
+  async function gerarArsenal(cat: ArsenalCategoria) {
+    if (arsenalGen) return;
+    setArsenalGen(cat);
+    setArsenalErr("");
+    setArsenalRes(null);
+    setArsenalSaveMsg("");
+    try {
+      let usados: number[] = [];
+      try { usados = JSON.parse(localStorage.getItem("arsenal_usados") || "[]"); } catch {}
+      const r = await fetch("/api/stories-arsenal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoria: cat, contexto: arsenalCtx || undefined, excluirDias: usados }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Erro ao gerar");
+      setArsenalRes(d);
+
+      // marca o script como usado (evita repetir até rodar todos da categoria)
+      try {
+        const novos = [...usados.filter(u => u !== d.script.dia), d.script.dia].slice(-50);
+        localStorage.setItem("arsenal_usados", JSON.stringify(novos));
+      } catch {}
+
+      // avança o ciclo se gerou a categoria do dia
+      if (ARSENAL_ORDEM[cicloPos] === cat) {
+        const nx = (cicloPos + 1) % ARSENAL_ORDEM.length;
+        setCicloPos(nx);
+        try { localStorage.setItem("arsenal_ciclo", String(nx)); } catch {}
+      }
+
+      // auto-save como rascunho
+      const opcao: RotinaOpcao | undefined = d.opcoes?.[0];
+      if (opcao) {
+        const now = new Date().toISOString();
+        const post: StoryPost = {
+          id: `sp_ars_${Date.now()}`,
+          titulo: opcao.titulo,
+          frames: opcao.frames,
+          dica: opcao.dica,
+          periodo: `arsenal · ${ARSENAL_CATEGORIAS[cat].label}`,
+          stage: "rascunho",
+          isBase: false,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const rs = await fetch("/api/story-posts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(post) });
+        const ds = await rs.json();
+        if (ds.post) {
+          setDrafts(prev => [ds.post, ...prev.filter(p => p.id !== ds.post.id)]);
+          setArsenalSaveMsg("sequência salva em rascunhos ✓");
+          setTimeout(() => setArsenalSaveMsg(""), 4000);
+        }
+      }
+    } catch (e) {
+      setArsenalErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setArsenalGen(null);
+    }
+  }
+
   const selF = selectedFrame !== null ? selectedFrame : null;
   const selectedStory = selF !== null && res?.frames[selF] ? res.frames[selF] : null;
 
@@ -656,6 +734,9 @@ export default function StoriesPage() {
           </button>
           <button type="button" onClick={() => setMode("rotina")} className={mode === "rotina" ? "is-active" : ""}>
             Rotina do dia
+          </button>
+          <button type="button" onClick={() => setMode("arsenal")} className={mode === "arsenal" ? "is-active" : ""}>
+            🎯 Arsenal
           </button>
           <button type="button" onClick={() => { setMode("rascunhos"); setDraftsLoading(true); fetch("/api/story-posts").then(r => r.json()).then(d => { setDrafts(d.posts || []); setDraftsLoading(false); }); }} className={mode === "rascunhos" ? "is-active" : ""}>
             Rascunhos {drafts.length > 0 && <span className="stories-tab-badge">{drafts.length}</span>}
@@ -895,6 +976,100 @@ export default function StoriesPage() {
               </button>
             </div>
             {autoSaveMsg && <p className="rotina-autosave-msg">{autoSaveMsg}</p>}
+          </div>
+        )}
+
+        {/* ── ABA ARSENAL ── */}
+        {mode === "arsenal" && (
+          <div className="arsenal-section">
+            <div className="studio-section-head">
+              <div>
+                <h3>Gerar sequência do arsenal</h3>
+                <p>Ciclo de 9 dias, 1 categoria por dia, nessa ordem exata. A IA pega um script do arsenal e reescreve 100% na sua voz. Cada sequência gerada já vai pros rascunhos.</p>
+              </div>
+            </div>
+
+            {/* Contexto opcional */}
+            <label className="stories-field" style={{ marginBottom: 14 }}>
+              <span>Contexto do momento <small style={{ color: "#5b6480", fontWeight: 400 }}>(opcional — encaixo no roteiro)</small></span>
+              <textarea
+                value={arsenalCtx}
+                onChange={e => setArsenalCtx(e.target.value)}
+                rows={2}
+                placeholder="ex: chegou feedback da aluna Fernanda / semana de foco em glúteo / abri 5 vagas na consultoria"
+                className="studio-textarea"
+              />
+            </label>
+
+            {/* Ciclo de categorias */}
+            <div className="arsenal-grid">
+              {ARSENAL_ORDEM.map((cat, idx) => {
+                const info = ARSENAL_CATEGORIAS[cat];
+                const isHoje = idx === cicloPos;
+                const isGen = arsenalGen === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => gerarArsenal(cat)}
+                    disabled={!!arsenalGen}
+                    className={`arsenal-card${isHoje ? " is-hoje" : ""}${isGen ? " is-gen" : ""}`}
+                  >
+                    <div className="arsenal-card-top">
+                      <span className="arsenal-card-dia">dia {idx + 1}</span>
+                      {isHoje && <span className="arsenal-hoje-pill">hoje</span>}
+                    </div>
+                    <div className="arsenal-card-emoji">{info.emoji}</div>
+                    <strong className="arsenal-card-label">{info.label}</strong>
+                    <p className="arsenal-card-obj">{info.objetivo}</p>
+                    <span className="arsenal-card-action">{isGen ? "gerando..." : "gerar sequência →"}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {arsenalErr && <div className="stories-error">⚠ {arsenalErr}</div>}
+            {arsenalSaveMsg && <p className="rotina-autosave-msg">{arsenalSaveMsg}</p>}
+
+            {/* Resultado */}
+            {arsenalRes && (
+              <div className="arsenal-result">
+                <div className="arsenal-result-head">
+                  <span className="arsenal-result-cat" >
+                    {ARSENAL_CATEGORIAS[arsenalRes.categoria].emoji} {ARSENAL_CATEGORIAS[arsenalRes.categoria].label}
+                  </span>
+                  <span className="arsenal-result-script">script: {arsenalRes.script.nome}</span>
+                </div>
+                {arsenalRes.opcoes.map((opcao, i) => (
+                  <div key={i} className="rotina-opcao-card">
+                    <div className="rotina-opcao-head">
+                      <span className="rotina-opcao-titulo">{opcao.titulo}</span>
+                    </div>
+                    <p className="rotina-opcao-angulo">{opcao.angulo}</p>
+                    <div className="rotina-frame-strip">
+                      {opcao.frames.map((f, fi) => (
+                        <div key={fi} className={`rotina-frame-chip ${f.tipo === "camera" ? "is-camera" : "is-screen"}`}>
+                          <span className="rotina-chip-icon">{f.tipo === "camera" ? "📹" : "🖥️"}</span>
+                          <span className="rotina-chip-text">{(f.texto || f.sugestao_visual || "").slice(0, 40)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="rotina-opcao-footer">
+                      {opcao.dica && <span className="rotina-dica">💡 {opcao.dica}</span>}
+                      <div className="rotina-usar-actions">
+                        <button
+                          onClick={() => abrirNoEditor(opcao)}
+                          className="dg-btn-primary stories-primary-btn rotina-usar-btn"
+                          title="Abrir no editor para gravar e baixar"
+                        >
+                          ✏ editar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
