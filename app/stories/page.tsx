@@ -286,6 +286,7 @@ export default function StoriesPage() {
 
   // Arsenal — ciclo de 9 categorias (1 dia cada)
   const [cicloPos, setCicloPos] = useState(0);
+  const [arsenalCat, setArsenalCat] = useState<ArsenalCategoria | null>(null);
   const [arsenalCtx, setArsenalCtx] = useState("");
   const [arsenalGen, setArsenalGen] = useState<ArsenalCategoria | null>(null);
   const [arsenalErr, setArsenalErr] = useState("");
@@ -985,7 +986,7 @@ export default function StoriesPage() {
             <div className="studio-section-head">
               <div>
                 <h3>Gerar sequência do arsenal</h3>
-                <p>Ciclo de 9 dias, 1 categoria por dia, nessa ordem exata. A IA pega um script do arsenal e reescreve 100% na sua voz. Cada sequência gerada já vai pros rascunhos.</p>
+                <p>Ciclo de 9 dias, 1 categoria por dia, nessa ordem exata. Escolhe a categoria e gera: uso um script do arsenal como esqueleto e escrevo com o seu cérebro — sua voz, sua história, suas alunas, seu método.</p>
               </div>
             </div>
 
@@ -1001,32 +1002,45 @@ export default function StoriesPage() {
               />
             </label>
 
-            {/* Ciclo de categorias */}
+            {/* Ciclo de categorias — seleciona uma */}
             <div className="arsenal-grid">
               {ARSENAL_ORDEM.map((cat, idx) => {
                 const info = ARSENAL_CATEGORIAS[cat];
                 const isHoje = idx === cicloPos;
+                const isSel = (arsenalCat ?? ARSENAL_ORDEM[cicloPos]) === cat;
                 const isGen = arsenalGen === cat;
                 return (
                   <button
                     key={cat}
                     type="button"
-                    onClick={() => gerarArsenal(cat)}
+                    onClick={() => setArsenalCat(cat)}
                     disabled={!!arsenalGen}
-                    className={`arsenal-card${isHoje ? " is-hoje" : ""}${isGen ? " is-gen" : ""}`}
+                    className={`arsenal-card${isSel ? " is-selected" : ""}${isHoje ? " is-hoje" : ""}${isGen ? " is-gen" : ""}`}
                   >
                     <div className="arsenal-card-top">
                       <span className="arsenal-card-dia">dia {idx + 1}</span>
                       {isHoje && <span className="arsenal-hoje-pill">hoje</span>}
                     </div>
                     <div className="arsenal-card-emoji">{info.emoji}</div>
-                    <strong className="arsenal-card-label">{info.label}</strong>
+                    <strong className="arsenal-card-label">{info.label}{isSel ? " ✓" : ""}</strong>
                     <p className="arsenal-card-obj">{info.objetivo}</p>
-                    <span className="arsenal-card-action">{isGen ? "gerando..." : "gerar sequência →"}</span>
                   </button>
                 );
               })}
             </div>
+
+            {/* Botão principal */}
+            <button
+              type="button"
+              onClick={() => gerarArsenal(arsenalCat ?? ARSENAL_ORDEM[cicloPos])}
+              disabled={!!arsenalGen}
+              className="dg-btn-primary stories-primary-btn arsenal-gerar-btn"
+            >
+              {arsenalGen
+                ? "gerando sequência..."
+                : `Gerar sequência — ${ARSENAL_CATEGORIAS[arsenalCat ?? ARSENAL_ORDEM[cicloPos]].emoji} ${ARSENAL_CATEGORIAS[arsenalCat ?? ARSENAL_ORDEM[cicloPos]].label}`}
+            </button>
+            <p className="arsenal-cerebro-note">🧠 gerado com o seu cérebro: voz, história, público, estilo dos stories e aprendizados</p>
 
             {arsenalErr && <div className="stories-error">⚠ {arsenalErr}</div>}
             {arsenalSaveMsg && <p className="rotina-autosave-msg">{arsenalSaveMsg}</p>}
