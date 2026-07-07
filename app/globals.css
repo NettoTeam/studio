@@ -3747,3 +3747,86 @@ html, body {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
 }
 .reels-learn-btn { font-size: 12px; padding: 7px 14px; white-space: nowrap; }
+
+/* ═══════════════════════════════════════════════
+   MOBILE — Stories & Reels (100% funcional)
+   ═══════════════════════════════════════════════ */
+@media (max-width: 760px) {
+  /* Cabeçalhos de seção quebram em vez de estourar */
+  .stories-page .studio-section-head,
+  .reels-page .studio-section-head { flex-wrap: wrap; }
+  .stories-page .studio-section-head h3,
+  .reels-page .studio-section-head h3 { white-space: normal; }
+
+  /* Heros mais enxutos */
+  .stories-hero, .reels-hero { padding: 18px 16px; min-height: 0; }
+
+  /* Inputs com 16px: iOS não dá zoom forçado ao focar */
+  .stories-page .studio-input,
+  .stories-page .studio-textarea,
+  .reels-page .studio-input,
+  .reels-page .studio-textarea,
+  .rotina-tema-input { font-size: 16px; }
+
+  /* Tabs de modo: rolagem horizontal, nunca corta */
+  .stories-mode-tabs {
+    width: 100%; overflow-x: auto; flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .stories-mode-tabs::-webkit-scrollbar { display: none; }
+  .stories-mode-tabs button {
+    flex: 0 0 auto; white-space: nowrap; padding: 8px 13px; font-size: 12.5px;
+  }
+
+  /* ── Rotina ── */
+  .rotina-period { padding: 13px 12px; }
+  .rotina-skeleton { flex-direction: column; }
+  .rotina-skeleton div { height: 110px; }
+  .rotina-opcao-footer { flex-direction: column; align-items: stretch; gap: 8px; }
+  .rotina-dica { flex: none; }
+  .rotina-usar-actions { margin-left: 0; }
+  .rotina-usar-btn { flex: 1; width: 100%; padding: 11px 16px; }
+  .rotina-gerar-btn { width: 100%; min-width: 0; }
+  .rotina-escrita-toggle { align-self: stretch; justify-content: center; }
+  .rotina-tema-remove { width: 28px; height: 28px; font-size: 12px; }
+  .rotina-tema-num { margin-top: 10px; }
+
+  /* ── Arsenal ── */
+  .arsenal-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .arsenal-card { padding: 12px 11px; gap: 5px; }
+  .arsenal-card-obj {
+    font-size: 10px; -webkit-line-clamp: 2;
+  }
+  .arsenal-card-label { font-size: 13px; }
+  .arsenal-card-emoji { font-size: 19px; }
+
+  /* ── Reels: formulário ── */
+  .reels-format-chips { flex-direction: column; }
+  .reels-format-chip { width: 100%; }
+  .reels-gerar-btn { width: 100%; align-self: stretch; text-align: center; }
+
+  /* ── Reels: barra de lote ── */
+  .reels-batch-bar { gap: 8px; padding: 10px 12px; }
+  .reels-batch-count { width: 100%; }
+  .reels-batch-btn, .reels-batch-discard { flex: 1 1 calc(50% - 8px); text-align: center; }
+  .reels-batch-clear { margin-left: 0; width: 100%; text-align: center; padding: 5px; }
+
+  /* ── Reels: cards e banco ── */
+  .reels-card { padding: 14px 13px; }
+  .reels-card-actions .reels-card-btn { padding: 8px 12px; font-size: 12px; }
+  .reel-stage-select { flex: 1; max-width: none; min-width: 0; padding: 8px; }
+  .reels-draft-head-actions { width: 100%; }
+  .reels-learn-btn { flex: 1; text-align: center; }
+  .draft-delete-btn { padding: 8px 12px !important; }
+}
+
+@media (max-width: 420px) {
+  /* Arsenal: cards um pouco mais altos em telas estreitas */
+  .arsenal-card-obj { display: none; }
+  .arsenal-card-action { margin-top: 0; }
+
+  /* Ações dos rascunhos de stories empilham */
+  .draft-card-head { flex-direction: column; }
+  .draft-card-actions { width: 100%; }
+  .draft-card-actions .dg-btn { flex: 1; }
+}
