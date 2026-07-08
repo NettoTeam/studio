@@ -29,6 +29,17 @@ function clampCards(n?: number) {
   return Math.min(12, Math.max(3, x));
 }
 
+// O Cândido odeia card lotado de texto — orçamento duro anexado a TODO layout.
+const BREVIDADE = `
+
+## POUCO TEXTO POR CARD (REGRA MAIS IMPORTANTE DE TODAS)
+O Cândido NÃO GOSTA de card com muito texto. Card lotado = FALHOU, mesmo que o conteúdo seja bom.
+- ORÇAMENTO DURO por card: headline até 8 palavras · body até 22 palavras (2 a 3 linhas curtas) · bullets no máximo 4, cada um até 6 palavras.
+- PROIBIDO card com mais de 40 palavras somando headline + body + bullets.
+- Se o trecho do roteiro estoura o orçamento: corte a gordura (conectivos, repetições, exemplo redundante) mantendo VERBATIM as frases do Cândido que ficarem — ou distribua em mais um card.
+- Um card com UMA frase forte vale mais que um card com cinco frases médias. Respiro visual > completude.
+- Na dúvida entre caber tudo ou cortar: CORTE. O carrossel ensina UMA ideia por card, não despeja o roteiro inteiro.`;
+
 function adaptLayouts(base: Card["layout"][], n: number): Card["layout"][] {
   if (!base.length) return [];
   if (n <= base.length) {
@@ -158,7 +169,7 @@ export async function POST(req: Request) {
       const res = await anthropic.messages.create({
         model: MODEL,
         max_tokens: 8000,
-        system: [{ type: "text", text: isL10 ? CARDS_SYSTEM_L10 : isL9 ? CARDS_SYSTEM_L9 : isL8 ? CARDS_SYSTEM_L8 : isL7 ? CARDS_SYSTEM_L7 : isL6 ? CARDS_SYSTEM_L6 : isL5 ? CARDS_SYSTEM_L5 : isL4 ? CARDS_SYSTEM_L4 : isL3 ? CARDS_SYSTEM_L3 : isL2 ? CARDS_SYSTEM_L2 : CARDS_SYSTEM, cache_control: { type: "ephemeral" } }],
+        system: [{ type: "text", text: (isL10 ? CARDS_SYSTEM_L10 : isL9 ? CARDS_SYSTEM_L9 : isL8 ? CARDS_SYSTEM_L8 : isL7 ? CARDS_SYSTEM_L7 : isL6 ? CARDS_SYSTEM_L6 : isL5 ? CARDS_SYSTEM_L5 : isL4 ? CARDS_SYSTEM_L4 : isL3 ? CARDS_SYSTEM_L3 : isL2 ? CARDS_SYSTEM_L2 : CARDS_SYSTEM) + BREVIDADE, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: userMsg + retryNote }],
       });
       usage = res.usage;

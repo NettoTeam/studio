@@ -44,6 +44,8 @@ ${JSON.stringify(ctx)}
 
 Reescreva APENAS o card de índice ${index}, mantendo coerência com os outros, a voz e o design do Cândido Netto (Team Netto · N² Squad).${body.instruction ? " INSTRUÇÃO: " + body.instruction : ""}${learnBlock}${goldBlock}
 
+POUCO TEXTO (regra dura): headline até 8 palavras · body até 22 palavras · bullets no máximo 4 de até 6 palavras · card inteiro no máximo 40 palavras. O Cândido odeia card lotado.
+
 Devolva SÓ um objeto JSON de UM card (sem array, sem "tema", sem markdown):
 {"layout": string, "kicker"?: string, "headline"?: string, "body"?: string, "bullets"?: string[], "stats"?: [{"value":string,"label":string}], "source"?: string, "signoff"?: string, "imageSentiment"?: string, "focalX"?: number, "focalY"?: number}`;
 

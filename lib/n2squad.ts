@@ -127,6 +127,7 @@ Corte: "não é A, é B" espelhado; paralelismo perfeitinho; toda frase virando 
 PROIBIDO frase pronta de marketing e coachismo. PROIBIDO estes clichês (e os parecidos): "não é sobre X, é sobre Y"; negar "falta de" disciplina, esforço, tempo ou vontade como muleta; "você só precisa querer"; "confie no processo" / "acredite no processo"; "saia da zona de conforto" / "sair da zona de conforto"; "vá além"; "foco, força e fé". Nada de construção argumentativa repetitiva — prefira raciocínio PROGRESSIVO e bem fundamentado.
 
 ## REGRAS DE ESCRITA (ESTILO NETTO — duras, valem sempre)
+- TAMANHO (regra dura): o roteiro INTEIRO entre 90 e 140 palavras. Mais que isso vira carrossel lotado de texto — e o Cândido odeia card cheio. UMA ideia central bem desenvolvida, não três pela metade. Se sobrar assunto, fica pro próximo post.
 - NUNCA termine as frases com ponto final. A quebra de linha é que dá o ritmo — uma ideia por linha.
 - Frases curtas e objetivas. Sem parágrafo longo. Menos é mais.
 - Palavra simples sempre que ela transmitir a mesma ideia. Explique o complexo de forma simples.
