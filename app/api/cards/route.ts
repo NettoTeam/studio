@@ -38,7 +38,14 @@ O Cândido NÃO GOSTA de card com muito texto. Card lotado = FALHOU, mesmo que o
 - PROIBIDO card com mais de 40 palavras somando headline + body + bullets.
 - Se o trecho do roteiro estoura o orçamento: corte a gordura (conectivos, repetições, exemplo redundante) mantendo VERBATIM as frases do Cândido que ficarem — ou distribua em mais um card.
 - Um card com UMA frase forte vale mais que um card com cinco frases médias. Respiro visual > completude.
-- Na dúvida entre caber tudo ou cortar: CORTE. O carrossel ensina UMA ideia por card, não despeja o roteiro inteiro.`;
+- Na dúvida entre caber tudo ou cortar: CORTE. O carrossel ensina UMA ideia por card, não despeja o roteiro inteiro.
+
+## O ÚLTIMO CARD (moral/cta/fecho) — O MENOR DE TODOS
+O fecho é um CTA bonito e chamativo, não um resumo. REGRA DURA:
+- headline: NO MÁXIMO 6 palavras (a moral em uma frase que arde)
+- SEM body. Se precisar muito, body de até 8 palavras
+- signoff: SÓ "Click no link da bio" — curto, nada além disso
+- NUNCA despeje sobra de roteiro no último card. Sobrou texto? Corta ou redistribui nos cards do meio.`;
 
 function adaptLayouts(base: Card["layout"][], n: number): Card["layout"][] {
   if (!base.length) return [];

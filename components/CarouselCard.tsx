@@ -552,6 +552,10 @@ function CarouselCard({ card, grain = true }: { card: Card; grain?: boolean }) {
     const isBottom = card.layout === "bottom";
     const isBand = card.layout === "top" || card.layout === "bottom";
     const bandH = 0.6;
+    const isMoral = card.layout === "moral";
+    // Fecho: CTA encolhe conforme o texto cresce pra nunca virar zona
+    const signoffLen = (card.signoff || "").length;
+    const signoffBase = isMoral && signoffLen > 24 ? Math.max(42, 78 - (signoffLen - 24) * 1.1) : 78;
     return (
       <div style={canvas} className={grainCls}>
         {card.image && (
@@ -569,15 +573,15 @@ function CarouselCard({ card, grain = true }: { card: Card; grain?: boolean }) {
         <div style={{
           position: "absolute", left: MARGIN, right: MARGIN, zIndex: 5, transform: TSHIFT,
           top: card.layout === "top" ? "auto" : isBottom ? 150 : "auto",
-          bottom: card.layout === "top" || card.layout === "full" || card.layout === "moral" ? 150 : "auto",
+          bottom: isMoral ? 300 : card.layout === "top" || card.layout === "full" ? 150 : "auto",
         }}>
           {card.kicker && <Kicker text={card.kicker} />}
           {card.headline && (
-            <h2 style={{ ...headlineStyle, fontSize: 92 * ts, marginBottom: 26, textAlign: al }}><Rich text={card.headline} /></h2>
+            <h2 style={{ ...headlineStyle, fontSize: (isMoral ? 72 : 92) * ts, marginBottom: 26, textAlign: al }}><Rich text={card.headline} /></h2>
           )}
           {card.body && <Body text={card.body} scale={bs} align={bodyAl} />}
           {card.signoff && (
-            <div data-mv="signoff" style={{ fontFamily: "var(--ct-font, 'Anton'), sans-serif", color: "var(--signoff-color, " + RED + ")", fontSize: 78 * signoffScale, marginTop: 22, letterSpacing: 1, whiteSpace: "pre-line", display: "inline-block", transform: SSYNC, transformOrigin: "left center" }}>{card.signoff}</div>
+            <div data-mv="signoff" style={{ fontFamily: "var(--ct-font, 'Anton'), sans-serif", color: "var(--signoff-color, " + RED + ")", fontSize: signoffBase * signoffScale, marginTop: 22, letterSpacing: 1, whiteSpace: "pre-line", display: "inline-block", transform: SSYNC, transformOrigin: "left center" }}>{card.signoff}</div>
           )}
         </div>
         {card.layout === "moral" && <FixedLogo card={card} id="moralLogo" label="Logo do fecho" x={0.06} y={0.82} w={200} z={7} />}
