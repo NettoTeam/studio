@@ -99,9 +99,37 @@ export default function CriarPage() {
   const [chosenCover, setChosenCover] = useState(""); // capa travada — vai VERBATIM pro card 1 (o cards não destila)
   // Gerador de temas — 20 temas com 2 capas cada, minerando cérebro + livros
   type Tema = { tema: string; hook1: string; hook2: string; pilar: string };
+  type SavedTema = { id: string; tema: string; hook1?: string; hook2?: string; pilar?: string; createdAt: string };
   const [temas, setTemas] = useState<Tema[]>([]);
   const [temasLoad, setTemasLoad] = useState(false);
   const [temasOpen, setTemasOpen] = useState(false);
+  // Temas salvos
+  const [savedTemas, setSavedTemas] = useState<SavedTema[]>([]);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [savedBusca, setSavedBusca] = useState("");
+  const [savedLoaded, setSavedLoaded] = useState(false);
+  async function loadSavedTemas() {
+    const r = await fetch("/api/temas-salvos");
+    const d = await r.json();
+    setSavedTemas(d.temas || []);
+    setSavedLoaded(true);
+  }
+  async function salvarTema(t: Tema) {
+    const r = await fetch("/api/temas-salvos", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: `tm_${Date.now()}`, tema: t.tema, hook1: t.hook1, hook2: t.hook2, pilar: t.pilar, createdAt: new Date().toISOString() }),
+    });
+    const d = await r.json();
+    if (d.tema) {
+      setSavedTemas(prev => [d.tema, ...prev.filter(s => s.tema.trim().toLowerCase() !== d.tema.tema.trim().toLowerCase())]);
+      toast("⭐ tema salvo");
+    }
+  }
+  async function apagarTemaSalvo(id: string) {
+    await fetch(`/api/temas-salvos?id=${id}`, { method: "DELETE" });
+    setSavedTemas(prev => prev.filter(t => t.id !== id));
+  }
+  const temaJaSalvo = (t: Tema) => savedTemas.some(s => s.tema.trim().toLowerCase() === t.tema.trim().toLowerCase());
   async function genTemas() {
     setTemasLoad(true); setTemasOpen(true);
     try {
@@ -174,6 +202,7 @@ export default function CriarPage() {
     setOutline(""); setStage("texto");
     try { localStorage.removeItem("dg_draft"); } catch {}
   }
+  useEffect(() => { loadSavedTemas().catch(() => {}); }, []);
   useEffect(() => {
     if (selected == null || stage !== "carrossel") return;
     if (!window.matchMedia("(max-width: 760px)").matches) return;
@@ -681,8 +710,66 @@ export default function CriarPage() {
                   ver os {temas.length} temas gerados
                 </button>
               )}
+              <button onClick={() => { setSavedOpen(o => !o); if (!savedLoaded) loadSavedTemas().catch(() => {}); }}
+                style={{ fontSize: 12.5, padding: "7px 14px", borderRadius: 8, cursor: "pointer",
+                  background: savedOpen ? "rgba(245,200,32,.12)" : "#17171b",
+                  color: savedOpen ? "#f5c820" : "#9aa0b0",
+                  border: "1px solid " + (savedOpen ? "rgba(245,200,32,.4)" : "#2e2e36"), fontWeight: 600 }}>
+                ⭐ Temas salvos{savedTemas.length > 0 ? ` (${savedTemas.length})` : ""}
+              </button>
               <span style={{ fontSize: 11, color: "#5a6378", marginLeft: 4 }}>— minera livros, fontes e cérebro · gera capa no padrão aprovado</span>
             </div>
+
+            {/* ── TEMAS SALVOS ── */}
+            {savedOpen && (
+              <div style={{ marginTop: 14, paddingBottom: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+                <input
+                  value={savedBusca}
+                  onChange={e => setSavedBusca(e.target.value)}
+                  placeholder="🔍 buscar nos temas salvos..."
+                  className="dg-input"
+                  style={{ fontSize: 13, padding: "9px 14px", maxWidth: 420 }}
+                />
+                {savedTemas.length === 0 && (
+                  <p style={{ fontSize: 12.5, color: "#5a6378", margin: 0, padding: "8px 0" }}>
+                    Nenhum tema salvo ainda. Gera os 20 temas e clica em ⭐ nos que valem guardar.
+                  </p>
+                )}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
+                  {savedTemas
+                    .filter(t => !savedBusca.trim() || `${t.tema} ${t.hook1 || ""} ${t.hook2 || ""} ${t.pilar || ""}`.toLowerCase().includes(savedBusca.trim().toLowerCase()))
+                    .map(t => (
+                      <div key={t.id} style={{ background: "#17171b", border: "1px solid rgba(245,200,32,.25)", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          {t.pilar && <span style={{ fontSize: 10, background: "#1e2030", color: "#7c8db0", borderRadius: 5, padding: "2px 7px", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{t.pilar}</span>}
+                          <span style={{ fontSize: 10, color: "#4e5878", marginLeft: "auto" }}>{new Date(t.createdAt).toLocaleDateString("pt-BR")}</span>
+                          <button onClick={() => apagarTemaSalvo(t.id)} title="Apagar tema salvo"
+                            style={{ fontSize: 11, background: "none", border: "none", color: "#5a6378", cursor: "pointer", padding: "2px 4px" }}>✕</button>
+                        </div>
+                        <p style={{ fontSize: 12.5, color: "#bdc4d4", lineHeight: 1.5, margin: 0 }}>{t.tema}</p>
+                        {(t.hook1 || t.hook2) && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 5, borderTop: "1px solid #2a2a36", paddingTop: 8 }}>
+                            {[t.hook1, t.hook2].filter(Boolean).map((h, hi) => (
+                              <div key={hi} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <span style={{ flex: 1, fontSize: 13, color: "#e8d5b7", fontWeight: 600, lineHeight: 1.3 }}
+                                  dangerouslySetInnerHTML={{ __html: (h as string).replace(/\*\*([^*]+)\*\*/g, '<span style="color:#e85d6a">$1</span>') }} />
+                                <button onClick={() => chooseTema({ tema: t.tema, hook1: t.hook1 || "", hook2: t.hook2 || "", pilar: t.pilar || "" }, (h as string).replace(/\*\*/g, ""))}
+                                  style={{ fontSize: 11, background: "#0e1420", color: "#7c8db0", border: "1px solid #2a3a5a", borderRadius: 6, padding: "3px 9px", cursor: "pointer", whiteSpace: "nowrap" }}>
+                                  usar
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <button onClick={() => chooseTema({ tema: t.tema, hook1: t.hook1 || "", hook2: t.hook2 || "", pilar: t.pilar || "" })}
+                          style={{ fontSize: 11.5, background: "transparent", color: "#5a6a8a", border: "1px dashed #2e3a50", borderRadius: 7, padding: "5px 0", cursor: "pointer", marginTop: 2 }}>
+                          → usar tema (gerar capas depois)
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
 
             {temasOpen && (
               <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10, paddingBottom: 14 }}>
@@ -691,9 +778,17 @@ export default function CriarPage() {
                 )}
                 {temas.map((t, i) => (
                   <div key={i} style={{ background: "#17171b", border: "1px solid #2e2e36", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
-                    {/* pilar badge */}
+                    {/* pilar badge + salvar */}
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: 10, background: "#1e2030", color: "#7c8db0", borderRadius: 5, padding: "2px 7px", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{t.pilar}</span>
+                      <button
+                        onClick={() => { if (!temaJaSalvo(t)) salvarTema(t); }}
+                        title={temaJaSalvo(t) ? "Tema já salvo" : "Salvar tema para usar depois"}
+                        style={{ marginLeft: "auto", fontSize: 14, background: "none", border: "none", cursor: temaJaSalvo(t) ? "default" : "pointer",
+                          color: temaJaSalvo(t) ? "#f5c820" : "#4e5878", padding: "0 2px", lineHeight: 1,
+                          transition: "color .15s" }}>
+                        {temaJaSalvo(t) ? "★" : "☆"}
+                      </button>
                     </div>
                     {/* tema */}
                     <p style={{ fontSize: 12.5, color: "#bdc4d4", lineHeight: 1.5, margin: 0 }}>{t.tema}</p>

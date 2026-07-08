@@ -234,6 +234,34 @@ export async function deleteReelIdea(id: string): Promise<void> {
   const { error } = await sb.from("kv").upsert({ key: "reel_ideas", value: cur.filter(p => p.id !== id) });
   if (error) console.error("deleteReelIdea", error.message);
 }
+// ---- TEMAS SALVOS: temas gerados no Criar que o Cândido guardou pra usar depois ----
+export interface SavedTema {
+  id: string;
+  tema: string;
+  hook1?: string;
+  hook2?: string;
+  pilar?: string;
+  createdAt: string;
+}
+export async function listSavedTemas(): Promise<SavedTema[]> {
+  const { data } = await sb.from("kv").select("value").eq("key", "saved_temas").maybeSingle();
+  return (data?.value as SavedTema[]) || [];
+}
+export async function addSavedTema(t: SavedTema): Promise<SavedTema> {
+  const cur = await listSavedTemas();
+  if (!cur.find(x => x.tema.trim().toLowerCase() === t.tema.trim().toLowerCase())) {
+    cur.unshift(t);
+  }
+  const { error } = await sb.from("kv").upsert({ key: "saved_temas", value: cur.slice(0, 400) });
+  if (error) console.error("addSavedTema", error.message);
+  return t;
+}
+export async function deleteSavedTema(id: string): Promise<void> {
+  const cur = await listSavedTemas();
+  const { error } = await sb.from("kv").upsert({ key: "saved_temas", value: cur.filter(t => t.id !== id) });
+  if (error) console.error("deleteSavedTema", error.message);
+}
+
 export interface ReelLearnings { updatedAt: string; n: number; summary: string }
 export async function getReelLearnings(): Promise<ReelLearnings | null> {
   const { data } = await sb.from("kv").select("value").eq("key", "reel_learnings").maybeSingle();
