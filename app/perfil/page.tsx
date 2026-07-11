@@ -43,6 +43,8 @@ export default function PerfilPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [ordenar, setOrdenar] = useState<"recentes" | "alcance" | "engajamento">("recentes");
   const [ajudaOpen, setAjudaOpen] = useState(false);
+  const [printFiles, setPrintFiles] = useState<File[]>([]);
+  const [printBusy, setPrintBusy] = useState(false);
 
   useEffect(() => {
     fetch("/api/instagram/connect").then(r => r.json()).then(setConn).catch(() => setConn({ connected: false }));
@@ -92,6 +94,22 @@ export default function PerfilPage() {
       toast("Análise pronta ✓");
     } catch (e) { toast(e instanceof Error ? e.message : String(e), "err"); }
     finally { setAnalyzing(false); }
+  }
+
+  async function analisarPrints() {
+    if (printBusy || !printFiles.length) return;
+    setPrintBusy(true);
+    try {
+      const fd = new FormData();
+      printFiles.forEach(f => fd.append("files", f));
+      const r = await fetch("/api/instagram/print", { method: "POST", body: fd });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Erro ao analisar");
+      setAnalysis(d.analysis);
+      setPrintFiles([]);
+      toast("Análise pronta ✓");
+    } catch (e) { toast(e instanceof Error ? e.message : String(e), "err"); }
+    finally { setPrintBusy(false); }
   }
 
   async function desconectar() {
@@ -162,6 +180,36 @@ export default function PerfilPage() {
             </button>
             <p className="perfil-seguro">🔒 as chaves ficam no teu Supabase, ninguém mais acessa. Só você usa esse app.</p>
           </div>
+        </section>
+      )}
+
+      {/* ── PLANO B: ANÁLISE POR PRINT (sempre disponível se não conectado) ── */}
+      {conn && !conn.connected && (
+        <section className="studio-section studio-section--pad">
+          <div className="studio-section-head">
+            <div>
+              <h3>Ou: análise por print (funciona já)</h3>
+              <p>Sem configurar nada na Meta. Sobe prints dos teus Insights do Instagram e a IA lê os números e te dá o diagnóstico.</p>
+            </div>
+          </div>
+          <div className="perfil-print-box">
+            <label className="perfil-print-drop">
+              <input type="file" accept="image/*" multiple hidden
+                onChange={e => setPrintFiles(Array.from(e.target.files || []))} />
+              <span className="perfil-print-icon">📸</span>
+              <span>{printFiles.length ? `${printFiles.length} print(s) selecionado(s)` : "clica pra escolher os prints dos Insights"}</span>
+              <small>pode mandar vários: contas alcançadas, engajamento, melhores posts, seguidores...</small>
+            </label>
+            <button onClick={analisarPrints} disabled={printBusy || !printFiles.length} className="dg-btn-primary stories-primary-btn">
+              {printBusy ? "lendo e analisando..." : "⚡ analisar os prints"}
+            </button>
+          </div>
+          {analysis && (
+            <div className="perfil-analysis" style={{ marginTop: 16 }}>
+              <span className="perfil-analysis-date">análise de {new Date(analysis.updatedAt).toLocaleString("pt-BR")}</span>
+              <Markdown text={analysis.summary} />
+            </div>
+          )}
         </section>
       )}
 

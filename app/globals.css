@@ -3929,3 +3929,16 @@ html, body {
   .perfil-post-body { padding: 8px 9px; }
   .perfil-post-cap { display: none; }
 }
+
+/* Perfil — plano B por print */
+.perfil-print-box { display: flex; flex-direction: column; gap: 12px; max-width: 560px; }
+.perfil-print-drop {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+  padding: 26px 20px; border: 1.5px dashed var(--dg-line); border-radius: 12px;
+  background: var(--dg-sunken); cursor: pointer; transition: border-color .15s;
+  font-size: 13px; color: #9aa8c4;
+}
+.perfil-print-drop:hover { border-color: rgba(239,71,111,.4); }
+.perfil-print-icon { font-size: 28px; }
+.perfil-print-drop small { font-size: 11px; color: #5b6480; }
+@media (max-width: 760px) { .perfil-print-box { max-width: none; } }
