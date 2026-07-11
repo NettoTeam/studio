@@ -35,6 +35,7 @@ export async function POST(req: Request) {
       tokenExpires: new Date(Date.now() + expiresIn * 1000).toISOString(),
       igUserId: acct.igUserId,
       username: acct.username,
+      pageId: acct.pageId,
       connectedAt: new Date().toISOString(),
     };
     await setIgConfig(cfg);

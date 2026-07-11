@@ -1,8 +1,9 @@
-// Integração com a Instagram API com Login do Instagram (graph.instagram.com).
-// Caminho novo da Meta: conecta direto na conta Profissional, sem Página do Facebook.
-// O Cândido gera um token curto no Graph API Explorer; a gente troca por token
-// longo (60 dias), pega o user_id e puxa perfil + posts com métricas.
-const IG = "https://graph.instagram.com";
+// Integração com a Instagram Graph API via Login do Facebook (graph.facebook.com).
+// O Cândido gera um token de usuário no Graph API Explorer com as permissões
+// instagram_basic, instagram_manage_insights, pages_show_list, pages_read_engagement.
+// A gente troca por token longo (60 dias), acha a conta IG ligada à Página e
+// puxa perfil + posts com métricas.
+const GRAPH = "https://graph.facebook.com/v21.0";
 
 export interface IgConfig {
   appId: string;
@@ -11,6 +12,7 @@ export interface IgConfig {
   tokenExpires: string;   // ISO
   igUserId: string;
   username?: string;
+  pageId?: string;
   connectedAt: string;
 }
 
@@ -41,49 +43,52 @@ export interface IgSnapshot {
   fetchedAt: string;
 }
 
-async function iget(path: string, params: Record<string, string>): Promise<unknown> {
+async function gget(path: string, params: Record<string, string>): Promise<unknown> {
   const qs = new URLSearchParams(params).toString();
-  const r = await fetch(`${IG}/${path}?${qs}`);
+  const r = await fetch(`${GRAPH}/${path}?${qs}`);
   const d = await r.json();
   if (!r.ok || d.error) {
-    throw new Error(d.error?.message || `Instagram API erro (${r.status})`);
+    throw new Error(d.error?.message || `Graph API erro (${r.status})`);
   }
   return d;
 }
 
-// Troca token curto por token longo (60 dias) — Instagram Login usa client_secret
-export async function exchangeToken(_appId: string, appSecret: string, shortToken: string): Promise<{ token: string; expiresIn: number }> {
-  const d = (await iget("access_token", {
-    grant_type: "ig_exchange_token",
+// Troca token curto por token longo (60 dias)
+export async function exchangeToken(appId: string, appSecret: string, shortToken: string): Promise<{ token: string; expiresIn: number }> {
+  const d = (await gget("oauth/access_token", {
+    grant_type: "fb_exchange_token",
+    client_id: appId,
     client_secret: appSecret,
-    access_token: shortToken,
+    fb_exchange_token: shortToken,
   })) as { access_token: string; expires_in?: number };
   return { token: d.access_token, expiresIn: d.expires_in || 60 * 24 * 3600 };
 }
 
-// Pega a conta Instagram do próprio token
-export async function discoverIgAccount(token: string): Promise<{ igUserId: string; username?: string }> {
-  const me = (await iget("me", {
+// Descobre a conta Instagram Business ligada às Páginas do usuário
+export async function discoverIgAccount(token: string): Promise<{ igUserId: string; username?: string; pageId?: string }> {
+  const pages = (await gget("me/accounts", {
     access_token: token,
-    fields: "user_id,username",
-  })) as { user_id?: string; id?: string; username?: string };
-  const igUserId = me.user_id || me.id;
-  if (!igUserId) throw new Error("Não consegui identificar a conta do Instagram. Confere se o token foi gerado com Login do Instagram.");
-  return { igUserId, username: me.username };
+    fields: "id,name,instagram_business_account{id,username}",
+  })) as { data?: { id: string; instagram_business_account?: { id: string; username?: string } }[] };
+
+  for (const p of pages.data || []) {
+    if (p.instagram_business_account?.id) {
+      return { igUserId: p.instagram_business_account.id, username: p.instagram_business_account.username, pageId: p.id };
+    }
+  }
+  throw new Error("Nenhuma conta Instagram Profissional encontrada. Confere se o Instagram é Comercial/Criador e está vinculado a uma Página do Facebook.");
 }
 
-// Puxa perfil + últimos posts com métricas
+// Puxa o snapshot: perfil + últimos posts com métricas
 export async function fetchSnapshot(cfg: IgConfig, limit = 25): Promise<IgSnapshot> {
   const token = cfg.longToken;
 
-  // Perfil
-  const profile = (await iget("me", {
+  const profile = (await gget(cfg.igUserId, {
     access_token: token,
     fields: "username,followers_count,media_count,profile_picture_url",
   })) as { username?: string; followers_count?: number; media_count?: number; profile_picture_url?: string };
 
-  // Últimos posts
-  const mediaRes = (await iget("me/media", {
+  const mediaRes = (await gget(`${cfg.igUserId}/media`, {
     access_token: token,
     fields: "id,caption,media_type,media_product_type,timestamp,permalink,thumbnail_url,media_url,like_count,comments_count",
     limit: String(limit),
@@ -108,12 +113,11 @@ export async function fetchSnapshot(cfg: IgConfig, limit = 25): Promise<IgSnapsh
       likes: m.like_count || 0,
       comments: m.comments_count || 0,
     };
-    // Insights por post — best effort (métricas variam por tipo)
     try {
       const metrics = m.media_product_type === "REELS"
         ? "reach,saved,shares,total_interactions,views"
         : "reach,saved,shares,total_interactions";
-      const ins = (await iget(`${m.id}/insights`, { access_token: token, metric: metrics })) as {
+      const ins = (await gget(`${m.id}/insights`, { access_token: token, metric: metrics })) as {
         data?: { name: string; values?: { value: number }[] }[];
       };
       for (const row of ins.data || []) {
@@ -139,11 +143,7 @@ export async function fetchSnapshot(cfg: IgConfig, limit = 25): Promise<IgSnapsh
   };
 }
 
-// Renova o token longo (Instagram Login: ig_refresh_token, sem secret)
+// Renova o token longo (troca de novo antes dos 60 dias)
 export async function refreshToken(cfg: IgConfig): Promise<{ token: string; expiresIn: number }> {
-  const d = (await iget("refresh_access_token", {
-    grant_type: "ig_refresh_token",
-    access_token: cfg.longToken,
-  })) as { access_token: string; expires_in?: number };
-  return { token: d.access_token, expiresIn: d.expires_in || 60 * 24 * 3600 };
+  return exchangeToken(cfg.appId, cfg.appSecret, cfg.longToken);
 }
