@@ -3840,3 +3840,92 @@ html, body {
   .draft-card-actions { width: 100%; }
   .draft-card-actions .dg-btn { flex: 1; }
 }
+
+/* ═══════════════════════════════════════════════
+   PERFIL — insights do Instagram
+   ═══════════════════════════════════════════════ */
+.perfil-page { display: flex; flex-direction: column; gap: 16px; }
+
+/* Conectar */
+.perfil-ajuda-toggle {
+  font-size: 12.5px; color: #78aaff; background: none; border: none; cursor: pointer;
+  padding: 4px 0; text-align: left;
+}
+.perfil-ajuda {
+  margin: 8px 0 4px; padding-left: 20px; display: flex; flex-direction: column; gap: 8px;
+  font-size: 12.5px; color: #9aa8c4; line-height: 1.5;
+}
+.perfil-ajuda b { color: #e0e5f2; }
+.perfil-form { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; max-width: 560px; }
+.perfil-seguro { font-size: 11px; color: #5b6480; margin: 0; }
+
+/* Conectado — header */
+.perfil-conn-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+}
+.perfil-conn-info { display: flex; align-items: center; gap: 12px; }
+.perfil-avatar { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid var(--dg-line); }
+.perfil-username { display: block; font-size: 16px; color: #e0e5f2; }
+.perfil-updated { display: block; font-size: 11.5px; color: #5b6480; margin-top: 2px; }
+.perfil-conn-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.perfil-disconnect { font-size: 12px; color: #7c869c; }
+.perfil-disconnect:hover { color: #ef476f; }
+
+/* Stats */
+.perfil-stats-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px;
+}
+.perfil-stat {
+  background: var(--dg-sunken); border: 1px solid var(--dg-line); border-radius: 12px;
+  padding: 14px; display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+}
+.perfil-stat strong { font-size: 22px; color: #fff; font-family: "Bebas Neue", sans-serif; letter-spacing: 1px; }
+.perfil-stat span { font-size: 11px; color: #7c869c; }
+
+/* Análise */
+.perfil-analysis {
+  background: var(--dg-sunken); border: 1px solid var(--dg-line); border-radius: 12px;
+  padding: 18px 20px; font-size: 13px; color: #c8cfe0; line-height: 1.6;
+}
+.perfil-analysis-date { display: block; font-size: 11px; color: #5b6480; margin-bottom: 10px; }
+
+/* Ordenação */
+.perfil-sort { display: flex; gap: 6px; }
+.perfil-sort-btn {
+  font-size: 11.5px; font-weight: 600; padding: 5px 12px; border-radius: 20px;
+  background: var(--dg-sunken); color: #6b7694; border: 1px solid var(--dg-line); cursor: pointer;
+}
+.perfil-sort-btn.is-on { background: rgba(239,71,111,.15); color: #ef476f; border-color: rgba(239,71,111,.3); }
+
+/* Grid de posts */
+.perfil-posts-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 8px;
+}
+.perfil-post {
+  display: flex; flex-direction: column; background: var(--dg-card);
+  border: 1px solid var(--dg-line); border-radius: 12px; overflow: hidden;
+  text-decoration: none; color: inherit; transition: border-color .15s, transform .12s;
+}
+.perfil-post:hover { border-color: rgba(239,71,111,.3); transform: translateY(-2px); }
+.perfil-post-thumb { width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--dg-sunken); }
+.perfil-post-noimg { display: flex; align-items: center; justify-content: center; font-size: 12px; color: #4e5878; }
+.perfil-post-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; }
+.perfil-post-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.perfil-post-tipo { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+.perfil-post-date { font-size: 10.5px; color: #5b6480; }
+.perfil-post-cap { font-size: 11.5px; color: #9aa8c4; line-height: 1.4; margin: 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.perfil-post-metrics { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: #8c96b0; }
+.perfil-post-eng { color: #5fd38a; font-weight: 700; margin-left: auto; }
+
+@media (max-width: 760px) {
+  .perfil-page .studio-input, .perfil-page .studio-textarea { font-size: 16px; }
+  .perfil-stats-row { grid-template-columns: repeat(2, 1fr); }
+  .perfil-conn-head { flex-direction: column; align-items: stretch; }
+  .perfil-conn-actions { width: 100%; }
+  .perfil-conn-actions .dg-btn-primary { flex: 1; }
+  .perfil-form { max-width: none; }
+  .perfil-posts-grid { grid-template-columns: 1fr 1fr; }
+  .perfil-post-body { padding: 8px 9px; }
+  .perfil-post-cap { display: none; }
+}

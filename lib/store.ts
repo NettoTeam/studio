@@ -262,6 +262,39 @@ export async function deleteSavedTema(id: string): Promise<void> {
   if (error) console.error("deleteSavedTema", error.message);
 }
 
+// ---- INSTAGRAM: config de conexão (token) + snapshot em cache ----
+export interface IgConfigStored {
+  appId: string; appSecret: string; longToken: string; tokenExpires: string;
+  igUserId: string; username?: string; pageId?: string; connectedAt: string;
+}
+export async function getIgConfig(): Promise<IgConfigStored | null> {
+  const { data } = await sb.from("kv").select("value").eq("key", "ig_config").maybeSingle();
+  return (data?.value as IgConfigStored) || null;
+}
+export async function setIgConfig(cfg: IgConfigStored): Promise<void> {
+  const { error } = await sb.from("kv").upsert({ key: "ig_config", value: cfg });
+  if (error) console.error("setIgConfig", error.message);
+}
+export async function clearIgConfig(): Promise<void> {
+  await sb.from("kv").delete().eq("key", "ig_config");
+  await sb.from("kv").delete().eq("key", "ig_snapshot");
+}
+export async function getIgSnapshot(): Promise<unknown | null> {
+  const { data } = await sb.from("kv").select("value").eq("key", "ig_snapshot").maybeSingle();
+  return data?.value ?? null;
+}
+export async function setIgSnapshot(snap: unknown): Promise<void> {
+  await sb.from("kv").upsert({ key: "ig_snapshot", value: snap });
+}
+export interface IgAnalysis { updatedAt: string; summary: string }
+export async function getIgAnalysis(): Promise<IgAnalysis | null> {
+  const { data } = await sb.from("kv").select("value").eq("key", "ig_analysis").maybeSingle();
+  return (data?.value as IgAnalysis) || null;
+}
+export async function setIgAnalysis(a: IgAnalysis): Promise<void> {
+  await sb.from("kv").upsert({ key: "ig_analysis", value: a });
+}
+
 export interface ReelLearnings { updatedAt: string; n: number; summary: string }
 export async function getReelLearnings(): Promise<ReelLearnings | null> {
   const { data } = await sb.from("kv").select("value").eq("key", "reel_learnings").maybeSingle();

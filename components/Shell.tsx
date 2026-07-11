@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   ["criar", "Criar"],
   ["stories", "Stories"],
   ["reels", "Reels"],
+  ["perfil", "Perfil"],
   ["quadro", "Quadro"],
   ["calendario", "Calendário"],
   ["marca", "Marca"],
@@ -24,6 +25,7 @@ const TITLES: Record<string, [string, string]> = {
   criar: ["CRIAR", "roteiro, gancho e carrossel"],
   stories: ["STORIES", "ideias e sequências do dia a dia"],
   reels: ["REELS", "banco de ideias para gravar"],
+  perfil: ["PERFIL", "insights do Instagram + análise"],
   kit: ["KIT DA MARCA", "seus estilos salvos: ver, renomear, excluir"],
   quadro: ["QUADRO", "pipeline do conteúdo"],
   calendario: ["CALENDÁRIO", "agenda de publicação"],
@@ -50,6 +52,7 @@ function Icon({ name }: { name: string }) {
     case "cerebro": return (<svg {...c}><rect x="5" y="5" width="14" height="14" rx="2" /><rect x="9" y="9" width="6" height="6" /><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" /></svg>);
     case "vault": return (<svg {...c}><path d="M4 10V8l8-5 8 5v2" /><path d="M5.5 10h13v9a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2z" /><path d="M9 15h6M12 12v6" /></svg>);
     case "reels": return (<svg {...c}><rect x="2" y="2" width="20" height="20" rx="4" /><path d="m10 8 6 4-6 4V8z" /><path d="M2 12h2M20 12h2M12 2v2M12 20v2" /></svg>);
+    case "perfil": return (<svg {...c}><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17" cy="7" r="1.2" /></svg>);
     default: return null;
   }
 }
