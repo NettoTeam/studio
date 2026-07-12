@@ -416,6 +416,38 @@ export default function CriarPage() {
   function mutateCards(fn: (cards: Card[]) => Card[]) {
     setCarousel((c) => ({ ...c, cards: reindex(fn(c.cards)) }));
   }
+
+  // Redesenhar com IA: descreve o visual → a IA devolve estilo → aplica em TODOS os cards, sem tocar no texto
+  const [restyleText, setRestyleText] = useState("");
+  const [restyling, setRestyling] = useState(false);
+  const [restyleOpen, setRestyleOpen] = useState(false);
+  const [lastStyle, setLastStyle] = useState<Partial<Card> | null>(null);
+  const [preStyle, setPreStyle] = useState<Card[] | null>(null);
+  async function redesenharComIA() {
+    if (restyling || restyleText.trim().length < 3 || !carousel.cards.length) return;
+    setRestyling(true);
+    try {
+      const temFoto = carousel.cards.some((c) => !!c.image);
+      const r = await fetch("/api/restyle", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instruction: restyleText, tema: carousel.tema || content.slice(0, 80), temFoto }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Erro ao redesenhar");
+      const style = d.style as Partial<Card>;
+      setPreStyle(carousel.cards);           // guarda pra desfazer
+      setLastStyle(style);
+      setCarousel((c) => ({ ...c, cards: c.cards.map((cd) => ({ ...cd, ...style })) }));
+      toast("✨ visual novo aplicado — o texto continua o mesmo");
+    } catch (e) { toast(e instanceof Error ? e.message : String(e), "err"); }
+    finally { setRestyling(false); }
+  }
+  function desfazerRedesenho() {
+    if (!preStyle) return;
+    setCarousel((c) => ({ ...c, cards: preStyle }));
+    setPreStyle(null); setLastStyle(null);
+    toast("visual anterior restaurado");
+  }
   function duplicateCard(i: number) {
     mutateCards((cards) => { const a = [...cards]; a.splice(i + 1, 0, { ...cards[i], id: crypto.randomUUID() }); return a; });
   }
@@ -1184,6 +1216,31 @@ export default function CriarPage() {
               <button className="dg-btn" onClick={undo} disabled={!historyState.canUndo} style={{ padding: "8px 14px" }} title="Desfazer (Ctrl+Z)">↶ desfazer</button>
               <button className="dg-btn" onClick={redo} disabled={!historyState.canRedo} style={{ padding: "8px 14px" }} title="Refazer (Ctrl+Y)">↷ refazer</button>
             </div>
+
+            {/* Redesenhar com IA — muda o visual de todos os cards, mantém o texto */}
+            {carousel.cards.length > 0 && (
+              <div className="studio-section" style={{ padding: restyleOpen ? "14px 16px" : "10px 16px", marginTop: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <button onClick={() => setRestyleOpen((o) => !o)}
+                    style={{ fontSize: 13, fontWeight: 700, background: "none", border: "none", color: "#c07bd6", cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
+                    🎨 Redesenhar com IA <span style={{ fontSize: 10, color: "#5a6378" }}>{restyleOpen ? "▲" : "▼"}</span>
+                  </button>
+                  <span style={{ fontSize: 12, color: "#7c869c" }}>descreve o visual e a IA remonta a estética — o texto continua igual</span>
+                  {lastStyle && <button onClick={desfazerRedesenho} style={{ fontSize: 11.5, background: "transparent", color: "#9aa0b0", border: "1px solid #3b3b44", borderRadius: 7, padding: "5px 11px", cursor: "pointer", marginLeft: "auto" }}>↩ desfazer redesenho</button>}
+                </div>
+                {restyleOpen && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+                    <textarea value={restyleText} onChange={(e) => setRestyleText(e.target.value)} rows={2}
+                      placeholder="ex: mais dark e agressivo, destaque vermelho forte / estilo revista clean com fundo claro / vibe premium com dourado"
+                      style={{ flex: 1, minWidth: 260, fontSize: 13.5, background: "#121216", color: "#f5f5f5", border: "1px solid #2e2e36", borderRadius: 8, padding: 10, resize: "vertical", fontFamily: "inherit" }} />
+                    <button onClick={redesenharComIA} disabled={restyling || restyleText.trim().length < 3} className="dg-btn-primary"
+                      style={{ padding: "11px 20px", fontSize: 14, opacity: (restyling || restyleText.trim().length < 3) ? 0.55 : 1, whiteSpace: "nowrap" }}>
+                      {restyling ? "redesenhando..." : "✨ aplicar visual"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
           {draftsOpen && (
             <div className="studio-section studio-section--pad create-drafts">
