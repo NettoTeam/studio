@@ -167,6 +167,43 @@ export default function CriarPage() {
     if (el && el.value !== roteiro) el.value = roteiro; // só escreve quando muda POR FORA (geração/limpeza/reset)
   }, [roteiro]);
   const [voiceMsg, setVoiceMsg] = useState("");
+  // Juiz cruzado (OpenAI revisa; Claude reescreve)
+  type Critica = { nota: number; veredito: string; fortes: string[]; fracos: string[]; sugestoes: string[] };
+  const [critica, setCritica] = useState<Critica | null>(null);
+  const [judging, setJudging] = useState(false);
+  const [melhorando, setMelhorando] = useState(false);
+  async function pedirJuiz() {
+    if (judging || roteiro.trim().length < 30) return;
+    setJudging(true); setCritica(null);
+    try {
+      const r = await fetch("/api/judge", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: roteiro, tipo: "roteiro", contexto: content.slice(0, 200) }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Erro na 2ª opinião");
+      setCritica(d.critica);
+    } catch (e) { toast(e instanceof Error ? e.message : String(e), "err"); }
+    finally { setJudging(false); }
+  }
+  async function melhorarComClaude() {
+    if (melhorando || !critica) return;
+    setMelhorando(true);
+    try {
+      const notas = [...(critica.fracos || []), ...(critica.sugestoes || [])].map(s => `- ${s}`).join("\n");
+      const r = await fetch("/api/roteiro", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, revisar: roteiro, critica: notas, registro: registro || undefined }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Erro ao melhorar");
+      setRoteiro(d.roteiro || "");
+      setTells(d.tells || []);
+      setCritica(null);
+      toast("✓ Claude reescreveu atacando os pontos fracos");
+    } catch (e) { toast(e instanceof Error ? e.message : String(e), "err"); }
+    finally { setMelhorando(false); }
+  }
   async function markRoteiroVoice() {
     if (roteiro.trim().length < 40) { setVoiceMsg("roteiro curto demais"); setTimeout(() => setVoiceMsg(""), 2000); return; }
     try {
@@ -1031,8 +1068,44 @@ export default function CriarPage() {
                   style={{ fontSize: 12, background: "#241f0e", color: "#e8c860", border: "1px solid #6a5a1e", borderRadius: 7, padding: "6px 11px", cursor: "pointer", fontWeight: 600 }}>⭐ minha voz</button>
                 <button onClick={rejectRoteiro} title="Não curti — a IA aprende a NÃO escrever assim (evita esse tom/ângulo nas próximas)"
                   style={{ fontSize: 12, background: "transparent", color: "#9a8a90", border: "1px solid #3a2a32", borderRadius: 7, padding: "6px 11px", cursor: "pointer" }}>👎 não curti</button>
+                <button onClick={pedirJuiz} disabled={judging} title="A OpenAI revisa com outro olhar e aponta as fraquezas — o Claude continua sendo quem escreve"
+                  style={{ fontSize: 12, background: "#0e1a24", color: "#63b3d6", border: "1px solid #1e455a", borderRadius: 7, padding: "6px 11px", cursor: "pointer", fontWeight: 600, opacity: judging ? 0.6 : 1 }}>{judging ? "revisando..." : "🔍 2ª opinião"}</button>
                 <button onClick={generateRoteiro} disabled={roteiroLoad} className="dg-btn" style={{ fontSize: 12, padding: "6px 12px" }}>{roteiroLoad ? "reescrevendo" : "↻ reescrever"}</button>
               </div>
+
+              {/* Painel do juiz cruzado */}
+              {critica && (
+                <div style={{ background: "#0d1620", border: "1px solid #1e455a", borderRadius: 10, padding: "14px 16px", marginBottom: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#63b3d6" }}>🔍 2ª opinião (OpenAI)</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: critica.nota >= 80 ? "#7bbf6a" : critica.nota >= 65 ? "#e8c860" : "#e0738c" }}>{critica.nota}/100</span>
+                    <span style={{ fontSize: 12.5, color: "#aab4c4", flex: 1, minWidth: 180 }}>{critica.veredito}</span>
+                    <button onClick={() => setCritica(null)} style={{ fontSize: 11, background: "none", border: "none", color: "#5a6378", cursor: "pointer" }}>✕</button>
+                  </div>
+                  {critica.fracos?.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#e0738c", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 4 }}>fraquezas</div>
+                      <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 3 }}>
+                        {critica.fracos.map((f, i) => <li key={i} style={{ fontSize: 12.5, color: "#cbd2de", lineHeight: 1.45 }}>{f}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {critica.sugestoes?.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#7bbf6a", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 4 }}>sugestões</div>
+                      <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 3 }}>
+                        {critica.sugestoes.map((s, i) => <li key={i} style={{ fontSize: 12.5, color: "#cbd2de", lineHeight: 1.45 }}>{s}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 2 }}>
+                    <button onClick={melhorarComClaude} disabled={melhorando} className="dg-btn-primary" style={{ fontSize: 12.5, padding: "8px 16px", opacity: melhorando ? 0.6 : 1 }}>
+                      {melhorando ? "Claude reescrevendo..." : "✨ melhorar com Claude"}
+                    </button>
+                    <span style={{ fontSize: 11, color: "#7c869c" }}>o Claude reescreve atacando esses pontos, mantendo tua voz</span>
+                  </div>
+                </div>
+              )}
               <textarea ref={roteiroRef} defaultValue={roteiro} onChange={(e) => setRoteiro(e.target.value)} rows={14}
                 className="dg-input" style={{ width: "100%", fontSize: 15, lineHeight: 1.55, resize: "vertical", fontFamily: "inherit" }} />
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>

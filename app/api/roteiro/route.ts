@@ -21,11 +21,42 @@ export async function POST(req: Request) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return Response.json({ error: "ANTHROPIC_API_KEY não configurada." }, { status: 500 });
 
-  const body = (await req.json().catch(() => ({}))) as { content?: string; hook?: string; emotions?: string[]; correlation?: string; inlineSource?: string; registro?: string; chosenHook?: string; funil?: "topo" | "meio" | "fundo" };
+  const body = (await req.json().catch(() => ({}))) as { content?: string; hook?: string; emotions?: string[]; correlation?: string; inlineSource?: string; registro?: string; chosenHook?: string; funil?: "topo" | "meio" | "fundo"; revisar?: string; critica?: string };
   const content = (body.content || "").trim();
-  if (!content) return Response.json({ error: "Manda o conteúdo." }, { status: 400 });
 
   const anthropic = new Anthropic({ apiKey: key });
+
+  // CAMINHO REVISÃO: reescreve um roteiro existente atacando as fraquezas apontadas pelo juiz cruzado.
+  // O texto final continua sendo do Claude — só usamos a crítica como norte.
+  const aRevisar = (body.revisar || "").trim();
+  if (aRevisar) {
+    const critica = (body.critica || "").trim().slice(0, 2000);
+    const { getGold } = await import("@/lib/store");
+    const gold = await getGold();
+    const goldB = gold.length ? `\n\nA VOZ DO CÂNDIDO (imite a cadência, NÃO copie):\n${pickRandom(gold, 2).map(g => g.text).join("\n---\n")}` : "";
+    const revMsg = `${GENERATION_RULES}${registroBlock(body.registro)}${goldB}
+
+ROTEIRO ATUAL DO CÂNDIDO (a base — mantenha o que já é bom e a voz dele):
+"""${aRevisar.slice(0, 4000)}"""
+
+CRÍTICA DE UM EDITOR (ataque ESTES pontos, sem inventar assunto novo):
+${critica || "Deixe o gancho mais forte, corte gordura, afie o fecho."}
+
+TAREFA: reescreve o roteiro corrigindo as fraquezas apontadas. Mantém a VOZ do Cândido (calma, direta, breve, sem cara de IA, sem clichê de coach). NÃO alonga: mesmo tamanho ou mais curto. Devolve SÓ o roteiro em texto corrido, sem comentários.`;
+    try {
+      const res = await anthropic.messages.create({
+        model: WRITE_MODEL, max_tokens: 1500,
+        messages: [{ role: "user", content: revMsg }],
+      });
+      let roteiro = cleanGeneratedText(textOf(res)) || textOf(res);
+      roteiro = roteiro.trim();
+      return Response.json({ roteiro, tells: detectTells(roteiro), revised: true });
+    } catch (e) {
+      return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    }
+  }
+
+  if (!content) return Response.json({ error: "Manda o conteúdo." }, { status: 400 });
 
   const emoBlock = emotionBlock(body.emotions || []);
   const hkBlock = hookBlock(body.hook);
