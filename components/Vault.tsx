@@ -285,41 +285,48 @@ export default function Vault({ onOpen }: { onOpen: (c: Carousel) => void }) {
 
         {ig && igShow && (
           <>
-            <div className="perfil-stats-row" style={{ marginBottom: 14 }}>
-              <div className="perfil-stat"><strong>{fmtN(ig.followers)}</strong><span>seguidores</span></div>
-              <div className="perfil-stat"><strong>{fmtN(ig.mediaCount)}</strong><span>posts no perfil</span></div>
-              <div className="perfil-stat"><strong>{ig.media.length}</strong><span>lidos aqui</span></div>
-              <div className="perfil-stat"><strong>{fmtN(ig.media.reduce((s, m) => s + (m.reach || 0), 0))}</strong><span>alcance somado</span></div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+              <div className="studio-stat"><strong>{fmtN(ig.followers)}</strong><span>Seguidores</span></div>
+              <div className="studio-stat"><strong>{fmtN(ig.mediaCount)}</strong><span>Posts no perfil</span></div>
+              <div className="studio-stat"><strong>{ig.media.length}</strong><span>Lidos aqui</span></div>
+              <div className="studio-stat"><strong>{fmtN(ig.media.reduce((s, m) => s + (m.reach || 0), 0))}</strong><span>Alcance somado</span></div>
             </div>
-            <div className="perfil-sort" style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, color: "var(--dg-faint)" }}>ordenar:</span>
               {([["alcance", "alcance"], ["engajamento", "engajamento"], ["recentes", "recentes"]] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setIgOrder(k)} className={`perfil-sort-btn${igOrder === k ? " is-on" : ""}`}>{l}</button>
+                <button key={k} onClick={() => setIgOrder(k)}
+                  style={{ ...btn, fontSize: 12, padding: "5px 12px", color: igOrder === k ? "#ff9fb4" : "#cfcfcf", borderColor: igOrder === k ? "rgba(239,71,111,0.5)" : "#2a3552", background: igOrder === k ? "rgba(239,71,111,0.1)" : "transparent" }}>{l}</button>
               ))}
             </div>
-            <div className="perfil-posts-grid">
+            <div className="vault-card-list">
               {igMedia.map(m => {
                 const tipo = IG_TIPO[m.productType || m.mediaType || ""] || { label: m.productType || "post", color: "#7c869c" };
                 const eng = m.likes + m.comments + (m.saved || 0) + (m.shares || 0);
                 return (
-                  <a key={m.id} href={m.permalink} target="_blank" rel="noreferrer" className="perfil-post">
-                    {m.thumbnail ? <img src={m.thumbnail} alt="" className="perfil-post-thumb" /> : <div className="perfil-post-thumb perfil-post-noimg">sem capa</div>}
-                    <div className="perfil-post-body">
-                      <div className="perfil-post-top">
-                        <span className="perfil-post-tipo" style={{ color: tipo.color, background: tipo.color + "1e" }}>{tipo.label}</span>
-                        <span className="perfil-post-date">{m.timestamp ? new Date(m.timestamp).toLocaleDateString("pt-BR") : ""}</span>
+                  <div key={m.id} className="vault-card">
+                    <div className="vault-thumb">
+                      {m.thumbnail
+                        ? <img src={m.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#56607c" }}>sem capa</div>}
+                    </div>
+                    <div className="vault-card-main">
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".4px", padding: "2px 9px", borderRadius: 20, color: tipo.color, background: tipo.color + "1e" }}>{tipo.label}</span>
+                        <span className="vault-card-meta" style={{ margin: 0 }}>{m.timestamp ? new Date(m.timestamp).toLocaleDateString("pt-BR") : ""}</span>
+                        {m.permalink && <a href={m.permalink} target="_blank" rel="noreferrer" style={{ ...btn, fontSize: 11.5, padding: "3px 10px", marginLeft: "auto", textDecoration: "none" }}>ver no IG ↗</a>}
                       </div>
-                      {m.caption && <p className="perfil-post-cap">{m.caption.slice(0, 80)}</p>}
-                      <div className="perfil-post-metrics">
-                        {m.reach != null && <span title="alcance">👁 {fmtN(m.reach)}</span>}
-                        {m.views != null && <span title="views">▶ {fmtN(m.views)}</span>}
+                      {m.caption && <div className="vault-card-title" style={{ fontSize: 14.5, fontWeight: 600, marginTop: 8, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{m.caption.slice(0, 120)}</div>}
+                      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10, fontSize: 13, color: "#c8cfe0" }}>
+                        {m.reach != null && <span title="alcance">👁 <b style={{ color: "#fff" }}>{fmtN(m.reach)}</b> alcance</span>}
+                        {m.views != null && <span title="visualizações">▶ <b style={{ color: "#fff" }}>{fmtN(m.views)}</b> views</span>}
                         <span title="curtidas">❤ {fmtN(m.likes)}</span>
                         <span title="comentários">💬 {fmtN(m.comments)}</span>
                         {m.saved != null && <span title="salvos">🔖 {fmtN(m.saved)}</span>}
                         {m.shares != null && <span title="compartilhamentos">✈ {fmtN(m.shares)}</span>}
-                        <span className="perfil-post-eng" title="engajamento total">Σ {fmtN(eng)}</span>
+                        <span title="engajamento total" style={{ color: "#7ed957", fontWeight: 700 }}>Σ {fmtN(eng)} eng</span>
                       </div>
                     </div>
-                  </a>
+                  </div>
                 );
               })}
             </div>
