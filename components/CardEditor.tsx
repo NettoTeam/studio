@@ -219,6 +219,15 @@ function caps(l: Layout) {
 // campos de ESTILO que o "Kit da marca" salva e aplica (não mexe em conteúdo, layout, foto nem posições)
 const KIT_KEYS: (keyof Card)[] = ["titleFont", "bodyFont", "titleColor", "bodyColor", "highlightColor", "caixaColor", "sublinhColor", "marcaColor", "contornoColor", "kickerColor", "signoffColor", "titleScale", "bodyScale", "titleShadow", "bodyShadow", "titleTracking", "titleLeading", "bodyTracking", "bodyLeading", "align", "titleAlign", "bodyAlign", "bg", "tint", "nicks", "hideNick"];
 
+// TEMPLATE = look COMPLETO do card: estilo + layout + POSIÇÕES do texto + fundo. Não pega o conteúdo (texto).
+const TEMPLATE_KEYS: (keyof Card)[] = [
+  ...KIT_KEYS,
+  "layout", "overlayColor", "indexStyle", "imageFit", "focalX", "focalY", "scale", "rotate", "bw",
+  "textX", "textY", "titleX", "titleY", "bodyX", "bodyY", "kickerX", "kickerY", "signoffX", "signoffY", "signoffScale",
+  "nickPos",
+];
+const TEMPLATE_IMG_KEYS: (keyof Card)[] = ["image", "image2", "imageSentiment"]; // só quando o usuário pede pra incluir o fundo
+
 // fontes auto-hospedadas, separadas por força: FORTES (display/título) x SECUNDÁRIAS (corpo)
 const FONT_GROUPS: { label: string; fonts: string[] }[] = [
   { label: "Fortes (título)", fonts: ["Anton", "Sequel100Black-75", "Montserrat ExtraBlack", "Airnt"] },
@@ -443,6 +452,33 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
     const style: Partial<Card> = {};
     KIT_KEYS.forEach((k) => { if (card[k] !== undefined) (style as Record<string, unknown>)[k] = card[k]; });
     persistKits([{ name, style }, ...kits.filter((x) => x.name !== name)].slice(0, 12));
+  }
+
+  // TEMPLATES (look completo: estilo + layout + posições + fundo opcional), salvos no navegador
+  const [templates, setTemplates] = useState<{ name: string; style: Partial<Card>; hasImage?: boolean }[]>([]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try { setTemplates(JSON.parse(localStorage.getItem("n2_templates") || "[]")); } catch {}
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+  function persistTemplates(list: { name: string; style: Partial<Card>; hasImage?: boolean }[]) {
+    setTemplates(list);
+    try { localStorage.setItem("n2_templates", JSON.stringify(list)); }
+    catch { alert("O template ficou grande demais pra salvar (o fundo pesa). Salva sem incluir a imagem, ou apaga templates antigos."); }
+  }
+  function saveTemplate() {
+    const name = prompt("Nome do template (ex: Darkside, Revista clean, Prova social):", "");
+    if (!name) return;
+    const incImg = card.image ? confirm("Incluir o FUNDO/imagem atual neste template?\n\nOK = inclui a imagem (aplica o mesmo fundo)\nCancelar = só o visual (cores, layout, posições)") : false;
+    const style: Partial<Card> = {};
+    TEMPLATE_KEYS.forEach((k) => { if (card[k] !== undefined) (style as Record<string, unknown>)[k] = card[k]; });
+    if (incImg) TEMPLATE_IMG_KEYS.forEach((k) => { if (card[k] !== undefined) (style as Record<string, unknown>)[k] = card[k]; });
+    persistTemplates([{ name, style, hasImage: incImg }, ...templates.filter((x) => x.name !== name)].slice(0, 20));
+  }
+  function deleteTemplate(name: string) {
+    if (!confirm(`Apagar o template "${name}"?`)) return;
+    persistTemplates(templates.filter((t) => t.name !== name));
   }
 
   const [imgs, setImgs] = useState<string[]>([]);
@@ -1400,11 +1436,12 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
       </Section>
 
       {/* KIT DA MARCA (por último) */}
-      <Section title="Kit da marca (estilo)" {...sec("kit")}>
-        <div style={{ fontSize: 11, color: "var(--dg-faint)", marginBottom: 8 }}>Salva fonte, cores, sombras, espaçamento, alinhamento, fundo e nick como um kit — e aplica num clique. Pra ver/renomear/excluir todos, abra <b style={{ color: "#cfcfcf" }}>Kit</b> no menu lateral</div>
-        <button onClick={saveKit} style={{ fontSize: 12.5, fontWeight: 600, background: "var(--dg-red-soft)", color: "#ff9fb4", border: "1px solid rgba(239,71,111,0.4)", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>💾 salvar estilo atual como kit</button>
+      <Section title="Kit & Templates" {...sec("kit")}>
+        {/* KIT — só estilo */}
+        <div style={{ fontSize: 11, color: "var(--dg-faint)", marginBottom: 8 }}><b style={{ color: "#cfcfcf" }}>Kit</b> = só o estilo (fonte, cores, sombras, alinhamento, fundo). Não pega layout nem posições.</div>
+        <button onClick={saveKit} style={{ fontSize: 12.5, fontWeight: 600, background: "var(--dg-red-soft)", color: "#ff9fb4", border: "1px solid rgba(239,71,111,0.4)", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>💾 salvar estilo como kit</button>
         {kits.length === 0 ? (
-          <div style={{ fontSize: 11.5, color: "var(--dg-faint)", marginTop: 8 }}>Nenhum kit salvo ainda. Deixa um card do jeito que quer e salva</div>
+          <div style={{ fontSize: 11.5, color: "var(--dg-faint)", marginTop: 8 }}>Nenhum kit salvo ainda.</div>
         ) : (
           <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
             {kits.map((k) => (
@@ -1412,6 +1449,28 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
                 <span style={{ flex: 1, fontSize: 12.5, color: "#e4e4e9", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.name}</span>
                 <button onClick={() => onApplyKit?.(k.style, false)} style={{ fontSize: 11, background: "#21212a", color: "#cfcfcf", border: "1px solid #2e2e36", borderRadius: 6, padding: "4px 9px", cursor: "pointer" }}>este card</button>
                 <button onClick={() => onApplyKit?.(k.style, true)} style={{ fontSize: 11, background: "#21212a", color: "#cfcfcf", border: "1px solid #2e2e36", borderRadius: 6, padding: "4px 9px", cursor: "pointer" }}>todos</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ height: 1, background: "var(--dg-line)", margin: "16px 0" }} />
+
+        {/* TEMPLATE — look completo */}
+        <div style={{ fontSize: 11, color: "var(--dg-faint)", marginBottom: 8 }}><b style={{ color: "#c07bd6" }}>Template</b> = o look COMPLETO: layout, posição do texto, cores, tamanhos e o fundo (opcional). Deixa um card perfeito, salva, e aplica igualzinho em outro.</div>
+        <button onClick={saveTemplate} style={{ fontSize: 12.5, fontWeight: 600, background: "rgba(192,123,214,.12)", color: "#d69bea", border: "1px solid rgba(192,123,214,0.4)", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>🎨 salvar este card como template</button>
+        {templates.length === 0 ? (
+          <div style={{ fontSize: 11.5, color: "var(--dg-faint)", marginTop: 8 }}>Nenhum template salvo. Deixa um card do jeito exato que quer (layout, posições, cores, fundo) e salva.</div>
+        ) : (
+          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+            {templates.map((t) => (
+              <div key={t.name} style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--dg-sunken)", border: "1px solid rgba(192,123,214,.2)", borderRadius: 8, padding: "6px 8px" }}>
+                <span style={{ flex: 1, fontSize: 12.5, color: "#e4e4e9", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {t.name}{t.hasImage ? <span title="inclui o fundo" style={{ marginLeft: 5, fontSize: 10, color: "#c07bd6" }}>🖼</span> : null}
+                </span>
+                <button onClick={() => onChange(t.style)} style={{ fontSize: 11, background: "#21212a", color: "#d69bea", border: "1px solid #3a2e42", borderRadius: 6, padding: "4px 9px", cursor: "pointer" }}>este card</button>
+                <button onClick={() => onApplyKit?.(t.style, true)} style={{ fontSize: 11, background: "#21212a", color: "#d69bea", border: "1px solid #3a2e42", borderRadius: 6, padding: "4px 9px", cursor: "pointer" }}>todos</button>
+                <button onClick={() => deleteTemplate(t.name)} title="apagar" style={{ fontSize: 11, background: "transparent", color: "#7a6070", border: "1px solid #3a2e42", borderRadius: 6, padding: "4px 7px", cursor: "pointer" }}>✕</button>
               </div>
             ))}
           </div>
