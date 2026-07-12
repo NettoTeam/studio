@@ -570,6 +570,25 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
     } catch { alert("Não consegui enviar essa imagem — tenta outra"); }
     setBgUpBusy(false);
   }
+  // Fundo gerado por IA (gpt-image-1)
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiFormato, setAiFormato] = useState<"retrato" | "quadrado" | "paisagem">("retrato");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  async function gerarFundoIA() {
+    if (aiBusy || aiPrompt.trim().length < 4) return;
+    setAiBusy(true);
+    try {
+      const r = await fetch("/api/gen-image", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: aiPrompt, formato: aiFormato }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Erro ao gerar");
+      if (d.src) onChange({ image: d.src, imageSentiment: "", bw: false });
+    } catch (e) { alert(e instanceof Error ? e.message : String(e)); }
+    setAiBusy(false);
+  }
   // 2ª foto (lado "depois" do l3-antes-depois)
   const bgFile2Ref = useRef<HTMLInputElement>(null);
   const [bgUpBusy2, setBgUpBusy2] = useState(false);
@@ -868,6 +887,29 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
 
       {/* FUNDO */}
       <Section title={hasImage ? "Fundo (imagem)" : "Fundo (sombra)"} {...sec("fundo")}>
+        {/* Gerar fundo com IA (gpt-image-1) */}
+        <button onClick={() => setAiOpen(o => !o)}
+          style={{ width: "100%", fontSize: 12.5, fontWeight: 600, background: aiOpen ? "rgba(120,170,255,.1)" : "#14161c", color: "#78aaff", border: "1px solid " + (aiOpen ? "#2e4a6a" : "#26303e"), borderRadius: 8, padding: "9px 12px", cursor: "pointer", marginBottom: aiOpen ? 8 : 12, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span>🎨 gerar fundo com IA</span><span style={{ fontSize: 10, color: "#5a6378" }}>{aiOpen ? "▲" : "▼"}</span>
+        </button>
+        {aiOpen && (
+          <div style={{ background: "#0c1219", border: "1px solid #26303e", borderRadius: 10, padding: 12, marginBottom: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+            <textarea value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} rows={3}
+              placeholder="ex: fundo escuro com fumaça e luz lateral vermelha, textura de concreto, clima intenso de academia"
+              style={{ width: "100%", fontSize: 13, background: "#121216", color: "#f5f5f5", border: "1px solid #2e2e36", borderRadius: 8, padding: 9, resize: "vertical", fontFamily: "inherit" }} />
+            <div style={{ display: "flex", gap: 6 }}>
+              {(["retrato", "quadrado", "paisagem"] as const).map(f => (
+                <button key={f} onClick={() => setAiFormato(f)}
+                  style={{ flex: 1, fontSize: 11.5, fontWeight: 600, background: aiFormato === f ? "#1e3350" : "#17171b", color: aiFormato === f ? "#78aaff" : "#7c869c", border: "1px solid " + (aiFormato === f ? "#2e4a6a" : "#2e2e36"), borderRadius: 7, padding: "7px 4px", cursor: "pointer" }}>{f}</button>
+              ))}
+            </div>
+            <button onClick={gerarFundoIA} disabled={aiBusy || aiPrompt.trim().length < 4}
+              style={{ fontSize: 13, fontWeight: 700, background: "#ef476f", color: "#fff", border: "none", borderRadius: 8, padding: "10px", cursor: "pointer", opacity: (aiBusy || aiPrompt.trim().length < 4) ? 0.55 : 1 }}>
+              {aiBusy ? "gerando imagem... (uns segundos)" : "✨ gerar e aplicar no card"}
+            </button>
+            <span style={{ fontSize: 10.5, color: "#5a6378", lineHeight: 1.4 }}>gpt-image-1 · o fundo entra colorido, sem texto na imagem (o texto é o do card por cima). Você move e ajusta tudo depois.</span>
+          </div>
+        )}
         {hasImage && (
           <>
             <Divider label="Foto" />
