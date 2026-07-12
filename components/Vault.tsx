@@ -35,6 +35,39 @@ export default function Vault({ onOpen }: { onOpen: (c: Carousel) => void }) {
   const [showMedidos, setShowMedidos] = useState(false);
   const printRef = useRef<HTMLInputElement>(null);
 
+  // Instagram — todos os posts com dados reais
+  type IgMedia = { id: string; caption?: string; mediaType?: string; productType?: string; timestamp?: string; permalink?: string; thumbnail?: string; likes: number; comments: number; reach?: number; saved?: number; shares?: number; views?: number };
+  type IgSnap = { username?: string; followers?: number; mediaCount?: number; media: IgMedia[]; fetchedAt: string };
+  const [ig, setIg] = useState<IgSnap | null>(null);
+  const [igBusy, setIgBusy] = useState(false);
+  const [igOrder, setIgOrder] = useState<"recentes" | "alcance" | "engajamento">("alcance");
+  const [igShow, setIgShow] = useState(true);
+  useEffect(() => {
+    fetch("/api/instagram/insights").then(r => r.json()).then(d => { if (d.snapshot) setIg(d.snapshot); }).catch(() => {});
+  }, []);
+  async function atualizarIg() {
+    if (igBusy) return;
+    setIgBusy(true);
+    try {
+      const r = await fetch("/api/instagram/insights", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Erro");
+      setIg(d.snapshot);
+      toast("Instagram atualizado ✓");
+    } catch (e) { toast(e instanceof Error ? e.message : String(e), "err"); }
+    finally { setIgBusy(false); }
+  }
+  const fmtN = (n?: number) => n == null ? "--" : n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n);
+  const igMedia = [...(ig?.media || [])].sort((a, b) => {
+    if (igOrder === "alcance") return (b.reach || 0) - (a.reach || 0);
+    if (igOrder === "engajamento") return ((b.likes + b.comments + (b.saved || 0) + (b.shares || 0)) - (a.likes + a.comments + (a.saved || 0) + (a.shares || 0)));
+    return new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime();
+  });
+  const IG_TIPO: Record<string, { label: string; color: string }> = {
+    REELS: { label: "Reels", color: "#78aaff" }, FEED: { label: "Feed", color: "#5fd38a" },
+    CAROUSEL_ALBUM: { label: "Carrossel", color: "#f59e0b" }, IMAGE: { label: "Foto", color: "#5fd38a" }, VIDEO: { label: "Vídeo", color: "#78aaff" },
+  };
+
   async function readPrint(files: FileList | null) {
     if (!files?.length) return;
     setReading(true); setReadMsg("");
@@ -233,6 +266,65 @@ export default function Vault({ onOpen }: { onOpen: (c: Carousel) => void }) {
           <div className="studio-stat"><strong>{medidos.length}</strong><span>Medidos</span></div>
           <div className="studio-stat"><strong>{avgScore || "--"}</strong><span>Nota média</span></div>
         </div>
+      </section>
+
+      {/* INSTAGRAM — todos os posts com dados reais */}
+      <section className="studio-section studio-section--pad">
+        <div className="studio-section-head">
+          <div>
+            <h3>📸 Instagram {ig?.username ? `· @${ig.username}` : ""}</h3>
+            <p>{ig ? `${ig.media.length} posts lidos · dados reais da Meta · atualizado ${new Date(ig.fetchedAt).toLocaleString("pt-BR")}` : "Conecta o Instagram na aba Perfil pra puxar todos os posts com os números reais aqui."}</p>
+          </div>
+          <div className="perfil-analysis-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {ig && <button onClick={() => setIgShow(s => !s)} className="dg-btn" style={{ fontSize: 12.5, padding: "6px 12px" }}>{igShow ? "recolher" : "ver"}</button>}
+            <button onClick={atualizarIg} disabled={igBusy} className="dg-btn-primary" style={{ fontSize: 13, padding: "7px 16px", opacity: igBusy ? 0.6 : 1 }}>
+              {igBusy ? "puxando..." : ig ? "↻ atualizar" : "puxar do Instagram"}
+            </button>
+          </div>
+        </div>
+
+        {ig && igShow && (
+          <>
+            <div className="perfil-stats-row" style={{ marginBottom: 14 }}>
+              <div className="perfil-stat"><strong>{fmtN(ig.followers)}</strong><span>seguidores</span></div>
+              <div className="perfil-stat"><strong>{fmtN(ig.mediaCount)}</strong><span>posts no perfil</span></div>
+              <div className="perfil-stat"><strong>{ig.media.length}</strong><span>lidos aqui</span></div>
+              <div className="perfil-stat"><strong>{fmtN(ig.media.reduce((s, m) => s + (m.reach || 0), 0))}</strong><span>alcance somado</span></div>
+            </div>
+            <div className="perfil-sort" style={{ marginBottom: 12 }}>
+              {([["alcance", "alcance"], ["engajamento", "engajamento"], ["recentes", "recentes"]] as const).map(([k, l]) => (
+                <button key={k} onClick={() => setIgOrder(k)} className={`perfil-sort-btn${igOrder === k ? " is-on" : ""}`}>{l}</button>
+              ))}
+            </div>
+            <div className="perfil-posts-grid">
+              {igMedia.map(m => {
+                const tipo = IG_TIPO[m.productType || m.mediaType || ""] || { label: m.productType || "post", color: "#7c869c" };
+                const eng = m.likes + m.comments + (m.saved || 0) + (m.shares || 0);
+                return (
+                  <a key={m.id} href={m.permalink} target="_blank" rel="noreferrer" className="perfil-post">
+                    {m.thumbnail ? <img src={m.thumbnail} alt="" className="perfil-post-thumb" /> : <div className="perfil-post-thumb perfil-post-noimg">sem capa</div>}
+                    <div className="perfil-post-body">
+                      <div className="perfil-post-top">
+                        <span className="perfil-post-tipo" style={{ color: tipo.color, background: tipo.color + "1e" }}>{tipo.label}</span>
+                        <span className="perfil-post-date">{m.timestamp ? new Date(m.timestamp).toLocaleDateString("pt-BR") : ""}</span>
+                      </div>
+                      {m.caption && <p className="perfil-post-cap">{m.caption.slice(0, 80)}</p>}
+                      <div className="perfil-post-metrics">
+                        {m.reach != null && <span title="alcance">👁 {fmtN(m.reach)}</span>}
+                        {m.views != null && <span title="views">▶ {fmtN(m.views)}</span>}
+                        <span title="curtidas">❤ {fmtN(m.likes)}</span>
+                        <span title="comentários">💬 {fmtN(m.comments)}</span>
+                        {m.saved != null && <span title="salvos">🔖 {fmtN(m.saved)}</span>}
+                        {m.shares != null && <span title="compartilhamentos">✈ {fmtN(m.shares)}</span>}
+                        <span className="perfil-post-eng" title="engajamento total">Σ {fmtN(eng)}</span>
+                      </div>
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          </>
+        )}
       </section>
 
       {/* APRENDIZADO */}
