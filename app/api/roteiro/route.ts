@@ -109,8 +109,11 @@ TAREFA: reescreve o roteiro corrigindo as fraquezas apontadas. Mantém a VOZ do 
   const inlineBlock = inline ? `\n\nFONTE PRINCIPAL (embase os números NISTO, na voz do Cândido, sem copiar frases):\n${inline}` : "";
 
   // exemplos-ouro da voz (alvo de imitação de cadência) + estruturas-ouro (arco)
-  const { getGold, getGoldStructures, getAudience, getEdge, recentFreshLabels, addFreshness, getBrainModel, getLearnings, getRejects, sourcesBackground } = await import("@/lib/store");
-  const [aud, edg, recent] = await Promise.all([getAudience(), getEdge(), recentFreshLabels(30)]);
+  const { getGold, getGoldStructures, getAudience, getEdge, recentFreshLabels, addFreshness, getBrainModel, getLearnings, getWinnerLearnings, getRejects, sourcesBackground } = await import("@/lib/store");
+  const [aud, edg, recent, winner] = await Promise.all([getAudience(), getEdge(), recentFreshLabels(30), getWinnerLearnings().catch(() => null)]);
+  const winnerBlock = winner?.summary
+    ? `\n\nO QUE BOMBA NO INSTAGRAM DO CÂNDIDO (padrão dos posts campeões reais — ${winner.n} posts analisados; use pra acertar mais, sem mudar a voz):\n${winner.summary}`
+    : "";
   const reguaBlock = `\n\nRÉGUA ATUAL DA MARCA (use como norte):\nPÚBLICO: ${aud}\nARESTA / CARA DA MARCA: ${edg}`;
 
   // ESPINHA DA MARCA + APRENDIZADO (ancoram o QUE você acredita/o que funciona — NÃO mudam COMO escreve).
@@ -154,7 +157,7 @@ TAREFA: reescreve o roteiro corrigindo as fraquezas apontadas. Mantém a VOZ do 
     ? `\n\nESTRUTURA QUE FUNCIONOU (validada por métrica — use como MOLDE do ARCO, adapte ao tema, não copie):\n${pickedStructs.map((s) => s.outline).join("\n")}`
     : "";
 
-  const userMsg = `${GENERATION_RULES}${reguaBlock}${brandBlock}${historiaBlock}${learnBlock}${regBlock}${funilBlock}${freshBlock}${hkBlock}${emoBlock}${chosenBlock}${corrBlock}${structBlock}${booksBlock}${sourcesBlock}${inlineBlock}${goldBlock}${rejectBlock}\n\nCONTEÚDO BRUTO PRA VIRAR ROTEIRO:\n${content}\n\nEscreva o roteiro corrido, na voz do Cândido. Só o texto.`;
+  const userMsg = `${GENERATION_RULES}${reguaBlock}${brandBlock}${historiaBlock}${learnBlock}${winnerBlock}${regBlock}${funilBlock}${freshBlock}${hkBlock}${emoBlock}${chosenBlock}${corrBlock}${structBlock}${booksBlock}${sourcesBlock}${inlineBlock}${goldBlock}${rejectBlock}\n\nCONTEÚDO BRUTO PRA VIRAR ROTEIRO:\n${content}\n\nEscreva o roteiro corrido, na voz do Cândido. Só o texto.`;
 
   try {
     // ESCREVE o rascunho (pensa o arco antes; o texto de pensamento não entra no roteiro).

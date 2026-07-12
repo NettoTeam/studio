@@ -181,6 +181,16 @@ export async function setStoryLearnings(l: StoryLearnings): Promise<void> {
   await sb.from("kv").upsert({ key: "story_learnings", value: l });
 }
 
+// ---- APRENDIZADO DOS CAMPEÕES DO INSTAGRAM (o que performou de verdade → alimenta a geração) ----
+export interface WinnerLearnings { updatedAt: string; n: number; summary: string }
+export async function getWinnerLearnings(): Promise<WinnerLearnings | null> {
+  const { data } = await sb.from("kv").select("value").eq("key", "ig_winner_learnings").maybeSingle();
+  return (data?.value as WinnerLearnings) || null;
+}
+export async function setWinnerLearnings(l: WinnerLearnings): Promise<void> {
+  await sb.from("kv").upsert({ key: "ig_winner_learnings", value: l });
+}
+
 // ---- ESTILO DOS STORIES (referência de estilo/formato que o gerador de stories segue) ----
 // Texto livre calibrado pelos prints + arquivo base do Cândido. Editável na aba Stories.
 export async function getStoriesStyle(): Promise<string> {
@@ -293,6 +303,36 @@ export async function getIgAnalysis(): Promise<IgAnalysis | null> {
 }
 export async function setIgAnalysis(a: IgAnalysis): Promise<void> {
   await sb.from("kv").upsert({ key: "ig_analysis", value: a });
+}
+
+export interface IgReport {
+  id: string;
+  title: string;
+  username?: string;
+  updatedAt: string;
+  summary: string;
+  data?: unknown;
+}
+export async function listIgReports(): Promise<IgReport[]> {
+  const { data } = await sb.from("kv").select("value").eq("key", "ig_reports").maybeSingle();
+  const reports = (data?.value as IgReport[]) || [];
+  return [...reports].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+export async function getIgReport(id: string): Promise<IgReport | null> {
+  const reports = await listIgReports();
+  return reports.find(r => r.id === id) || null;
+}
+export async function addIgReport(report: IgReport): Promise<IgReport> {
+  const reports = await listIgReports();
+  const next = [report, ...reports.filter(r => r.id !== report.id)].slice(0, 50);
+  const { error } = await sb.from("kv").upsert({ key: "ig_reports", value: next });
+  if (error) console.error("addIgReport", error.message);
+  return report;
+}
+export async function deleteIgReport(id: string): Promise<void> {
+  const reports = await listIgReports();
+  const { error } = await sb.from("kv").upsert({ key: "ig_reports", value: reports.filter(r => r.id !== id) });
+  if (error) console.error("deleteIgReport", error.message);
 }
 
 export interface ReelLearnings { updatedAt: string; n: number; summary: string }

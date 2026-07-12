@@ -111,9 +111,9 @@ export async function POST(req: Request) {
   const ctxBlock = ctxLines.length ? `\nCONTEXTO EXTRA DO DIA:\n${ctxLines.join("\n")}` : "";
 
   // Cérebro (mesmo do carrossel)
-  const { getAudience, getEdge, getBrainModel, getGold, getRejects, getStoriesStyle, getStoryLearnings } = await import("@/lib/store");
-  const [aud, edg, model, gold, rejects, estilo, storyLearnings] = await Promise.all([
-    getAudience(), getEdge(), getBrainModel(), getGold(), getRejects("voice"), getStoriesStyle(), getStoryLearnings()
+  const { getAudience, getEdge, getBrainModel, getGold, getRejects, getStoriesStyle, getStoryLearnings, getWinnerLearnings } = await import("@/lib/store");
+  const [aud, edg, model, gold, rejects, estilo, storyLearnings, winner] = await Promise.all([
+    getAudience(), getEdge(), getBrainModel(), getGold(), getRejects("voice"), getStoriesStyle(), getStoryLearnings(), getWinnerLearnings().catch(() => null)
   ]);
   const reguaBlock = `\n\nRÉGUA DA MARCA:\nPÚBLICO: ${aud}\nARESTA/CARA: ${edg}`;
   const histBlock = model.historia?.trim()
@@ -122,7 +122,10 @@ export async function POST(req: Request) {
   const goldBlock = gold.length ? `\n\nA VOZ DO CÂNDIDO (imite a cadência, NÃO copie):\n${pickRandom(gold, 2).map(g => g.text).join("\n---\n")}` : "";
   const rejectBlock = rejects.length ? `\n\nFOGE DESSE PADRÃO (anti-ouro):\n${rejects.slice(0, 4).map(r => `✗ ${r.text}`).join("\n")}` : "";
   const estiloBlock = estilo ? `\n\nESTILO DOS STORIES (priorize):\n${estilo}` : "";
-  const learnBlock = storyLearnings?.summary ? `\n\nO QUE FUNCIONA NOS STORIES DO CÂNDIDO (aprendido dos posts reais — aplique):\n${storyLearnings.summary.slice(0, 1000)}` : "";
+  const learnBlock = [
+    storyLearnings?.summary ? `\n\nO QUE FUNCIONA NOS STORIES DO CÂNDIDO (aprendido dos posts reais — aplique):\n${storyLearnings.summary.slice(0, 1000)}` : "",
+    winner?.summary ? `\n\nO QUE BOMBA NO INSTAGRAM DELE (campeões reais — ${winner.n} posts; surfe esse padrão):\n${winner.summary.slice(0, 800)}` : "",
+  ].join("");
   const escritaBlock = modoEscrita
     ? `\n\nMODO SEQUÊNCIA ESCRITA (OBRIGATÓRIO):\n• Todos os frames devem ser tipo "tela" (campo "tipo": "tela"). NENHUM frame de câmera.\n• Cada frame carrega apenas texto escrito — curto, direto, impactante.\n• Os frames se complementam em sequência: cada um continua ou aprofunda o anterior, como uma thread visual.\n• Campo "mostrar": deixe vazio ou descreva apenas o fundo/cenário visual estático.\n• Sem "gravar", sem "câmera", sem instruções de gravação — é conteúdo 100% escrito.`
     : "";

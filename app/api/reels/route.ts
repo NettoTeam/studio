@@ -291,9 +291,9 @@ export async function POST(req: Request) {
   const funil = body.funil || null;
   const reg = body.registro || null;
 
-  const { getAudience, getEdge, getBrainModel, getGold, getRejects, getReelLearnings } = await import("@/lib/store");
-  const [aud, edg, model, gold, rejects, reelLearnings] = await Promise.all([
-    getAudience(), getEdge(), getBrainModel(), getGold(), getRejects("voice"), getReelLearnings(),
+  const { getAudience, getEdge, getBrainModel, getGold, getRejects, getReelLearnings, getWinnerLearnings } = await import("@/lib/store");
+  const [aud, edg, model, gold, rejects, reelLearnings, winner] = await Promise.all([
+    getAudience(), getEdge(), getBrainModel(), getGold(), getRejects("voice"), getReelLearnings(), getWinnerLearnings().catch(() => null),
   ]);
 
   const reguaBlock = `PÚBLICO-ALVO: ${aud}\n\nARESTA E CARA DO CÂNDIDO: ${edg}`;
@@ -306,9 +306,10 @@ export async function POST(req: Request) {
   const rejectBlock = rejects.length
     ? `\n\nFUGE DESSE PADRÃO (anti-ouro):\n${rejects.slice(0, 4).map(r => `✗ ${r.text}`).join("\n")}`
     : "";
-  const learnBlock = reelLearnings?.summary
-    ? `\n\nO QUE FUNCIONA NOS REELS DO CÂNDIDO (aprendido — aplique):\n${reelLearnings.summary.slice(0, 800)}`
-    : "";
+  const learnBlock = [
+    reelLearnings?.summary ? `\n\nO QUE FUNCIONA NOS REELS DO CÂNDIDO (aprendido — aplique):\n${reelLearnings.summary.slice(0, 800)}` : "",
+    winner?.summary ? `\n\nO QUE BOMBA NO INSTAGRAM DELE (campeões reais — ${winner.n} posts; surfe esse padrão):\n${winner.summary.slice(0, 800)}` : "",
+  ].join("");
   const ctxBlock = contexto ? `\n\nCONTEXTO DO MOMENTO:\n${contexto}` : "";
   const tomBlock = registroBlock(reg);
 
