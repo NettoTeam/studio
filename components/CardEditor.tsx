@@ -37,13 +37,13 @@ function Section({ title, children, right, open, onToggle, secId }: { title: str
         onKeyDown={(e) => { if (!collapsible) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle?.(); } }}
         style={{ width: "100%", border: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 52, padding: "0 14px", cursor: collapsible ? "pointer" : "default", userSelect: "none", background: isOpen ? "rgba(239,71,111,0.07)" : "rgba(255,255,255,.025)", transition: "background .18s", textAlign: "left" }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
-          <span style={{ width: 34, height: 34, borderRadius: 9, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 900, color: isOpen ? "#fff" : "#7a8399", background: isOpen ? "#ef476f" : "rgba(255,255,255,.06)", border: "1.5px solid " + (isOpen ? "#ef476f" : "rgba(255,255,255,.09)"), transition: "background .18s, color .18s, border-color .18s" }}>{sectionIcon(title)}</span>
-          <span style={{ fontFamily: "var(--cb-font,'Inter'),sans-serif", fontSize: 14, fontWeight: 700, color: isOpen ? "#fff" : "#9aa0b0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", transition: "color .18s" }}>{title}</span>
+        <div className="card-section-label" style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+          <span className="card-section-icon" style={{ width: 34, height: 34, borderRadius: 9, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 900, color: isOpen ? "#fff" : "#7a8399", background: isOpen ? "#ef476f" : "rgba(255,255,255,.06)", border: "1.5px solid " + (isOpen ? "#ef476f" : "rgba(255,255,255,.09)"), transition: "background .18s, color .18s, border-color .18s" }}>{sectionIcon(title)}</span>
+          <span className="card-section-title" style={{ fontFamily: "var(--cb-font,'Inter'),sans-serif", fontSize: 14, fontWeight: 700, color: isOpen ? "#fff" : "#9aa0b0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", transition: "color .18s" }}>{title}</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          {right && <div onClick={(e) => e.stopPropagation()}>{right}</div>}
-          {collapsible && <span style={{ color: isOpen ? "#ef476f" : "#4a5168", fontSize: 18, lineHeight: 1, display: "inline-block", transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .22s, color .18s" }}>⌄</span>}
+        <div className="card-section-actions" style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          {right && <div className="card-section-right" onClick={(e) => e.stopPropagation()}>{right}</div>}
+          {collapsible && <span className="card-section-caret" style={{ color: isOpen ? "#ef476f" : "#4a5168", fontSize: 18, lineHeight: 1, display: "inline-block", transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .22s, color .18s" }}>⌄</span>}
         </div>
       </div>
       {/* Animação via CSS grid — compatível com altura dinâmica */}
@@ -589,6 +589,30 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
     } catch (e) { alert(e instanceof Error ? e.message : String(e)); }
     setAiBusy(false);
   }
+  // Redesenhar SÓ este card com IA (descreve o visual → aplica no card, mantém o texto)
+  const [reText, setReText] = useState("");
+  const [reBusy, setReBusy] = useState(false);
+  const [reOpen, setReOpen] = useState(false);
+  const [rePrev, setRePrev] = useState<Partial<Card> | null>(null);
+  async function redesenharCard() {
+    if (reBusy || reText.trim().length < 3) return;
+    setReBusy(true);
+    try {
+      const r = await fetch("/api/restyle", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instruction: reText, tema: card.headline || card.kicker || "card", temFoto: !!card.image }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Erro ao redesenhar");
+      const style = d.style as Partial<Card>;
+      // guarda os valores atuais dos campos que vão mudar, pra desfazer
+      const prev: Partial<Card> = {};
+      (Object.keys(style) as (keyof Card)[]).forEach((k) => { (prev as Record<string, unknown>)[k] = card[k]; });
+      setRePrev(prev);
+      onChange(style);
+    } catch (e) { alert(e instanceof Error ? e.message : String(e)); }
+    setReBusy(false);
+  }
   // 2ª foto (lado "depois" do l3-antes-depois)
   const bgFile2Ref = useRef<HTMLInputElement>(null);
   const [bgUpBusy2, setBgUpBusy2] = useState(false);
@@ -716,6 +740,31 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
         </button>
       </div>
       {voiceMsg && <div style={{ fontSize: 12, color: voiceMsg.startsWith("⭐") ? "#e8c860" : "#e0738c", marginBottom: 10 }}>{voiceMsg}</div>}
+
+      {/* Redesenhar SÓ este card com IA */}
+      <div className={"card-redesign" + (reOpen ? " is-open" : "")}>
+        <button type="button" className="card-redesign-toggle" onClick={() => setReOpen((o) => !o)}>
+          <span className="card-redesign-main">
+            <span className="card-redesign-icon">🎨</span>
+            <span>redesenhar este card com IA</span>
+          </span>
+          <span className="card-redesign-caret">{reOpen ? "▲" : "▼"}</span>
+        </button>
+        {reOpen && (
+          <div className="card-redesign-panel">
+            <textarea value={reText} onChange={(e) => setReText(e.target.value)} rows={2}
+              placeholder="ex: mais dark e agressivo / clean editorial fundo claro / destaque dourado premium"
+              className="card-redesign-textarea" />
+            <div className="card-redesign-actions">
+              <button type="button" className="card-redesign-apply" onClick={redesenharCard} disabled={reBusy || reText.trim().length < 3}>
+                {reBusy ? "redesenhando..." : "✨ aplicar neste card"}
+              </button>
+              {rePrev && <button type="button" className="card-redesign-undo" onClick={() => { onChange(rePrev); setRePrev(null); }}>↩ desfazer</button>}
+            </div>
+            <span className="card-redesign-note">muda só o visual deste card: cores, fonte, sombra e alinhamento. O texto continua igual.</span>
+          </div>
+        )}
+      </div>
 
       <nav className="card-editor-nav" style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 12, padding: "8px 10px", marginBottom: 14 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -1159,7 +1208,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
         </label>
       }>
         {card.hideNick ? (
-          <div style={{ fontSize: 12, color: "#7c869c" }}>Nick <b style={{ color: "#e0738c" }}>desligado</b> neste card. Marque "mostrar" pra exibir</div>
+          <div style={{ fontSize: 12, color: "#7c869c" }}>Nick <b style={{ color: "#e0738c" }}>desligado</b> neste card. Marque &quot;mostrar&quot; pra exibir</div>
         ) : (
           <>
             <div style={{ fontSize: 11, color: "#7c869c", marginBottom: 8 }}>Aparece pequeno no topo dos cards dos <b style={{ color: "#cfcfcf" }}>Layouts 2 a 6</b>. Pode usar 1 ou 2 (ex: <b style={{ color: "#cfcfcf" }}>@teamnetto</b> e <b style={{ color: "#cfcfcf" }}>@n2squad</b>)</div>
@@ -1194,7 +1243,7 @@ export default function CardEditor({ card, onChange, carousel, index, onReplace,
         </label>
       }>
         {!card.index ? (
-          <div style={{ fontSize: 12, color: "#7c869c" }}>Marque "mostrar" pra exibir o indicador de página neste card</div>
+          <div style={{ fontSize: 12, color: "#7c869c" }}>Marque &quot;mostrar&quot; pra exibir o indicador de página neste card</div>
         ) : (
           <>
             {/* estilos */}

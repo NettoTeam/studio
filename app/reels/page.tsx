@@ -65,7 +65,41 @@ function friendlyGenerateError(e: unknown): string {
 
 export default function ReelsPage() {
   // Tab
-  const [tab, setTab] = useState<"gerar" | "rascunhos">("gerar");
+  const [tab, setTab] = useState<"gerar" | "rascunhos" | "transcrever">("gerar");
+  // Transcrição de reels (Whisper)
+  const [trFile, setTrFile] = useState<File | null>(null);
+  const [trBusy, setTrBusy] = useState(false);
+  const [trText, setTrText] = useState("");
+  const [trMsg, setTrMsg] = useState("");
+  async function transcrever() {
+    if (trBusy || !trFile) return;
+    setTrBusy(true); setTrMsg(""); setTrText("");
+    try {
+      const fd = new FormData();
+      fd.append("file", trFile);
+      const r = await fetch("/api/transcribe", { method: "POST", body: fd });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Erro ao transcrever");
+      setTrText(d.texto || "");
+    } catch (e) { setTrMsg((e instanceof Error ? e.message : String(e))); }
+    finally { setTrBusy(false); }
+  }
+  async function salvarComoVoz() {
+    if (!trText.trim()) return;
+    await fetch("/api/voice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: trText, note: "reel transcrito" }) });
+    setTrMsg("⭐ salvo como tua voz — a IA vai imitar essa cadência");
+    setTimeout(() => setTrMsg(""), 3500);
+  }
+  function usarNoCarrossel() {
+    if (!trText.trim()) return;
+    try {
+      const raw = localStorage.getItem("dg_draft");
+      const draft = raw ? JSON.parse(raw) : {};
+      draft.content = trText;
+      localStorage.setItem("dg_draft", JSON.stringify(draft));
+      window.location.href = "/criar";
+    } catch { window.location.href = "/criar"; }
+  }
 
   // Geração
   const [nIdeas, setNIdeas] = useState(15);
@@ -301,7 +335,46 @@ export default function ReelsPage() {
             Banco salvo
             {rascunhosCount > 0 && <span className="stories-tab-badge">{rascunhosCount}</span>}
           </button>
+          <button type="button" onClick={() => setTab("transcrever")} className={tab === "transcrever" ? "is-active" : ""}>
+            🎙 Transcrever
+          </button>
         </div>
+
+        {/* ── ABA TRANSCREVER ── */}
+        {tab === "transcrever" && (
+          <div className="reels-form">
+            <div className="studio-section-head">
+              <div>
+                <h3>Transcrever reel</h3>
+                <p>Sobe o vídeo ou o áudio de um reel (30s a 120s). A IA transcreve, e você pode salvar como tua voz (a IA aprende teu jeito real de falar) ou mandar pro Carrossel.</p>
+              </div>
+            </div>
+            <div className="reels-form-body">
+              <label className="perfil-print-drop" style={{ cursor: "pointer" }}>
+                <input type="file" accept="video/*,audio/*" hidden onChange={e => { setTrFile(e.target.files?.[0] || null); setTrText(""); setTrMsg(""); }} />
+                <span className="perfil-print-icon">🎙</span>
+                <span>{trFile ? trFile.name : "clica pra escolher o reel (vídeo ou áudio)"}</span>
+                <small>{trFile ? `${(trFile.size / 1024 / 1024).toFixed(1)}MB` : "limite 25MB — se o vídeo passar, manda só o áudio"}</small>
+              </label>
+              <button onClick={transcrever} disabled={trBusy || !trFile} className="dg-btn-primary stories-primary-btn reels-gerar-btn">
+                {trBusy ? "transcrevendo... (uns segundos)" : "✨ transcrever"}
+              </button>
+              {trMsg && <div className={trMsg.startsWith("⭐") ? "rotina-autosave-msg" : "stories-error"}>{trMsg}</div>}
+
+              {trText && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+                  <textarea value={trText} onChange={e => setTrText(e.target.value)} rows={10}
+                    className="studio-textarea" style={{ fontSize: 14, lineHeight: 1.6 }} />
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button onClick={salvarComoVoz} className="dg-btn">⭐ salvar como minha voz</button>
+                    <button onClick={() => { navigator.clipboard.writeText(trText); setTrMsg("copiado ✓"); setTimeout(() => setTrMsg(""), 2000); }} className="dg-btn">copiar</button>
+                    <button onClick={usarNoCarrossel} className="dg-btn-primary stories-primary-btn">→ usar no Carrossel</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── ABA GERAR ── */}
         {tab === "gerar" && (
