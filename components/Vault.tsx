@@ -27,9 +27,6 @@ export default function Vault({ onOpen }: { onOpen: (c: Carousel) => void }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Metrics>({});
   const [fbDraft, setFbDraft] = useState("");
-  const [learning, setLearning] = useState(false);
-  const [learnings, setLearnings] = useState<{ summary: string; n: number; updatedAt: string; ackAt?: string } | null>(null);
-  const [showLearn, setShowLearn] = useState(false); // expandir o aprendizado já integrado pra reler
   const [reading, setReading] = useState(false);
   const [readMsg, setReadMsg] = useState("");
   const [showMedidos, setShowMedidos] = useState(false);
@@ -67,6 +64,35 @@ export default function Vault({ onOpen }: { onOpen: (c: Carousel) => void }) {
     REELS: { label: "Reels", color: "#78aaff" }, FEED: { label: "Feed", color: "#5fd38a" },
     CAROUSEL_ALBUM: { label: "Carrossel", color: "#f59e0b" }, IMAGE: { label: "Foto", color: "#5fd38a" }, VIDEO: { label: "Vídeo", color: "#78aaff" },
   };
+  // nota de performance real (mesma lógica do "aprender com o que bombou")
+  function igScore(m: IgMedia): number {
+    const reach = m.reach || 0, saves = m.saved || 0, shares = m.shares || 0;
+    const eng = m.likes + m.comments + saves + shares;
+    const engRate = reach > 0 ? eng / reach : 0;
+    return reach + saves * 15 + shares * 20 + engRate * 5000;
+  }
+  const igRanked = [...(ig?.media || [])].sort((a, b) => igScore(b) - igScore(a));
+  const igTopScore = igRanked.length ? igScore(igRanked[0]) : 1;
+
+  // Aprendizado dos CAMPEÕES do Instagram (aprende com TODOS os posts reais)
+  const [winner, setWinner] = useState<{ summary: string; updatedAt: string; n: number } | null>(null);
+  const [winBusy, setWinBusy] = useState(false);
+  const [winShow, setWinShow] = useState(false);
+  useEffect(() => {
+    fetch("/api/instagram/learn-winners").then(r => r.json()).then(d => { if (d.learnings) setWinner(d.learnings); }).catch(() => {});
+  }, []);
+  async function aprenderCampeoes() {
+    if (winBusy) return;
+    setWinBusy(true);
+    try {
+      const r = await fetch("/api/instagram/learn-winners", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Erro");
+      setWinner(d.learnings); setWinShow(true);
+      toast("⭐ a IA aprendeu com teus campeões — já aplica nas gerações");
+    } catch (e) { toast(e instanceof Error ? e.message : String(e), "err"); }
+    finally { setWinBusy(false); }
+  }
 
   async function readPrint(files: FileList | null) {
     if (!files?.length) return;
@@ -92,24 +118,8 @@ export default function Vault({ onOpen }: { onOpen: (c: Carousel) => void }) {
     const r = await fetch("/api/posts");
     const d = await r.json();
     setPosts(d.posts || []);
-    const lr = await fetch("/api/learn");
-    const ld = await lr.json();
-    setLearnings(ld.learnings || null);
   }
-  useEffect(() => {
-    let alive = true;
-    async function boot() {
-      const r = await fetch("/api/posts");
-      const d = await r.json();
-      const lr = await fetch("/api/learn");
-      const ld = await lr.json();
-      if (!alive) return;
-      setPosts(d.posts || []);
-      setLearnings(ld.learnings || null);
-    }
-    boot().catch(() => {});
-    return () => { alive = false; };
-  }, []);
+  useEffect(() => { load().catch(() => {}); }, []);
 
   async function saveMetrics(p: Post) {
     const updated = { ...p, metrics: { ...p.metrics, ...draft }, feedback: fbDraft };
@@ -119,23 +129,6 @@ export default function Vault({ onOpen }: { onOpen: (c: Carousel) => void }) {
     toast("✓ métricas salvas — o card foi pros Medidos");
   }
 
-  async function runLearn() {
-    setLearning(true);
-    try {
-      const r = await fetch("/api/learn", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-      const d = await r.json();
-      if (d.learnings) { setLearnings(d.learnings); setShowLearn(true); toast("🧠 aprendizado atualizado — revisa e integra"); }
-    } catch { toast("erro ao aprender", "err"); }
-    setLearning(false);
-  }
-  // Cândido revisou → integra (recolhe o painel; o aprendizado já alimenta a escrita automaticamente)
-  async function integrarLearn() {
-    try {
-      const r = await fetch("/api/learn", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ack: true }) });
-      const d = await r.json();
-      if (d.learnings) { setLearnings(d.learnings); setShowLearn(false); toast("✓ aprendizado integrado"); }
-    } catch { toast("erro ao integrar", "err"); }
-  }
   async function del(id: string) {
     await fetch(`/api/posts?id=${id}`, { method: "DELETE" });
     await load();
@@ -150,33 +143,6 @@ export default function Vault({ onOpen }: { onOpen: (c: Carousel) => void }) {
 
   const scores = performanceScores(posts);
   const nMed = measuredCount(posts);
-  const pub = posts.filter((p) => p.stage === "publicado" || p.stage === "arquivado");
-  const aMedir = pub.filter((p) => !isMeasured(p));
-  const medidos = pub.filter(isMeasured).sort((a, b) => (scores[b.id] ?? 0) - (scores[a.id] ?? 0));
-  const avgScore = medidos.length ? Math.round(medidos.reduce((acc, p) => acc + (scores[p.id] ?? 0), 0) / medidos.length) : 0;
-
-  if (!posts.length) {
-    return (
-      <div className="studio-page vault-page">
-        <section className="studio-hero">
-          <div className="studio-hero__copy">
-            <h2>O cofre de aprendizado dos posts</h2>
-            <p>Quando um carrossel for publicado, ele entra aqui para receber métricas, feedback e virar inteligência de criação</p>
-          </div>
-          <div className="studio-hero__side">
-            <div className="studio-stat"><strong>0</strong><span>Posts</span></div>
-            <div className="studio-stat"><strong>0</strong><span>A medir</span></div>
-            <div className="studio-stat"><strong>0</strong><span>Medidos</span></div>
-            <div className="studio-stat"><strong>--</strong><span>Nota</span></div>
-          </div>
-        </section>
-
-        <section className="studio-section studio-section--pad">
-          <div className="studio-empty">Vault vazio. Cria um carrossel, salva no Quadro, publica e volta aqui para logar os números</div>
-        </section>
-      </div>
-    );
-  }
 
   function card(p: Post) {
     const nota = scores[p.id];
@@ -261,12 +227,58 @@ export default function Vault({ onOpen }: { onOpen: (c: Carousel) => void }) {
           <p>Registre métricas, feedback e padrões para a IA aprender o que performa melhor no teu próprio acervo</p>
         </div>
         <div className="studio-hero__side">
-          <div className="studio-stat"><strong>{pub.length}</strong><span>Publicados</span></div>
-          <div className="studio-stat"><strong>{aMedir.length}</strong><span>A medir</span></div>
-          <div className="studio-stat"><strong>{medidos.length}</strong><span>Medidos</span></div>
-          <div className="studio-stat"><strong>{avgScore || "--"}</strong><span>Nota média</span></div>
+          <div className="studio-stat"><strong>{ig ? fmtN(ig.followers) : "--"}</strong><span>Seguidores</span></div>
+          <div className="studio-stat"><strong>{ig ? fmtN(ig.mediaCount) : "--"}</strong><span>Posts</span></div>
+          <div className="studio-stat"><strong>{ig ? ig.media.length : "--"}</strong><span>Analisados</span></div>
+          <div className="studio-stat"><strong>{winner ? "✓" : "--"}</strong><span>Aprendido</span></div>
         </div>
       </section>
+
+      {/* APRENDIZADO — aprende com TODOS os posts do Instagram */}
+      <section className="studio-section studio-section--pad vault-learn">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+            🧠 Aprendizado da IA
+            {winBusy && <span style={{ color: "#ef476f", fontSize: 13 }}>· aprendendo</span>}
+            {winner && !winBusy && <span className="dg-chip" style={{ color: "#7ed957", borderColor: "#2c4c28" }}>✓ aplicando nas gerações</span>}
+          </span>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {winner && <span style={{ fontSize: 12, color: "var(--dg-faint)" }}>{winner.n} posts · {new Date(winner.updatedAt).toLocaleDateString("pt-BR")}</span>}
+            {winner && <button onClick={() => setWinShow(s => !s)} className="dg-btn" style={{ fontSize: 12.5, padding: "6px 12px" }}>{winShow ? "recolher" : "ver"}</button>}
+            <button onClick={aprenderCampeoes} disabled={winBusy || !ig} className="dg-btn-primary" style={{ fontSize: 13, padding: "7px 16px", opacity: (winBusy || !ig) ? 0.6 : 1 }}>
+              {winBusy ? "Aprendendo" : winner ? "Aprender de novo" : "Aprender com todos"}
+            </button>
+          </div>
+        </div>
+        {!winner && (
+          <div style={{ fontSize: 13.5, color: "var(--dg-grey)", marginTop: 10 }}>{ig ? "A IA olha teus posts campeões (alcance, salvos, compartilhamentos), extrai o padrão do que funciona e passa a gerar carrossel/reel/stories mais parecido. Clica em aprender." : "Puxa o Instagram abaixo pra IA aprender com teus posts."}</div>
+        )}
+        {winner && !winShow && (
+          <div style={{ fontSize: 13, color: "var(--dg-grey)", marginTop: 8 }}>Já valendo nas próximas gerações. Clica em <b style={{ color: "var(--dg-text)" }}>ver</b> pra reler, ou <b style={{ color: "var(--dg-text)" }}>Aprender de novo</b> pra reanalisar com os dados novos.</div>
+        )}
+        {winner && winShow && (<><hr className="dg-divider" /><Markdown text={winner.summary} /></>)}
+      </section>
+
+      {/* RANKING — posts reais do Instagram por performance */}
+      {igRanked.length > 0 && (
+        <section className="studio-section studio-section--pad">
+          <div className="studio-section-head">
+            <h3>Ranking</h3>
+            <p>teus posts do Instagram por performance real (alcance + salvos + compartilhamentos + engajamento)</p>
+          </div>
+          {igRanked.slice(0, 12).map((m) => {
+            const nota = Math.round((igScore(m) / igTopScore) * 100);
+            const titulo = (m.caption || "").replace(/\s+/g, " ").slice(0, 70) || (IG_TIPO[m.productType || ""]?.label || "post");
+            return (
+              <div key={m.id} className="vault-rank-row">
+                <div className="vault-rank-title">{titulo}</div>
+                <div className="vault-rank-track"><div style={{ width: `${nota}%` }} /></div>
+                <div className="vault-rank-score">{nota}</div>
+              </div>
+            );
+          })}
+        </section>
+      )}
 
       {/* INSTAGRAM — todos os posts com dados reais */}
       <section className="studio-section studio-section--pad">
@@ -334,93 +346,14 @@ export default function Vault({ onOpen }: { onOpen: (c: Carousel) => void }) {
         )}
       </section>
 
-      {/* APRENDIZADO */}
-      {(() => {
-        const integrado = !!(learnings?.ackAt && learnings.ackAt === learnings.updatedAt);
-        const expandido = !!learnings && (!integrado || showLearn);
-        return (
-          <section className="studio-section studio-section--pad vault-learn">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-                🧠 Aprendizado da IA
-                {learning && <span style={{ color: "#ef476f", fontSize: 13 }}>· aprendendo</span>}
-                {integrado && !learning && <span className="dg-chip" style={{ color: "#7ed957", borderColor: "#2c4c28" }}>✓ integrado</span>}
-                {!integrado && learnings && !learning && <span className="dg-chip" style={{ color: "#e8c860", borderColor: "#6a5a1e" }}>novo — revisar</span>}
-              </span>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                {learnings && <span style={{ fontSize: 12, color: "var(--dg-faint)" }}>{learnings.n} posts · {new Date(learnings.updatedAt).toLocaleDateString("pt-BR")}</span>}
-                {integrado && <button onClick={() => setShowLearn((s) => !s)} className="dg-btn" style={{ fontSize: 12.5, padding: "6px 12px" }}>{showLearn ? "recolher" : "ver"}</button>}
-                <button onClick={runLearn} disabled={learning} className="dg-btn-primary" style={{ fontSize: 13, padding: "7px 16px", opacity: learning ? 0.6 : 1 }}>
-                  {learning ? "Aprendendo" : "Aprender agora"}
-                </button>
-              </div>
-            </div>
-
-            {!learnings && (
-              <div style={{ fontSize: 13.5, color: "var(--dg-grey)", marginTop: 10 }}>Sem aprendizado ainda — loga as métricas de um post que a IA começa a achar padrão</div>
-            )}
-
-            {integrado && !showLearn && learnings && (
-              <div style={{ fontSize: 13, color: "var(--dg-grey)", marginTop: 8 }}>Integrado e já valendo nas próximas gerações. Clica em <b style={{ color: "var(--dg-text)" }}>ver</b> pra reler, ou <b style={{ color: "var(--dg-text)" }}>Aprender agora</b> pra reanalisar com os dados novos</div>
-            )}
-
-            {expandido && learnings && (
-              <>
-                <hr className="dg-divider" />
-                <Markdown text={learnings.summary} />
-                {!integrado && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--dg-line-soft)", flexWrap: "wrap" }}>
-                    <button onClick={integrarLearn} className="dg-btn-primary" style={{ fontSize: 13.5, padding: "9px 18px" }}>✓ Integrar aprendizado</button>
-                    <span style={{ fontSize: 12, color: "var(--dg-faint)" }}>revisei — pode guardar (já alimenta a escrita automaticamente; some daqui até o próximo &quot;Aprender&quot;)</span>
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-        );
-      })()}
-
-      {/* RANKING por nota composta */}
-      {medidos.length > 0 && (
-        <section className="studio-section studio-section--pad">
-          <div className="studio-section-head">
-            <h3>Ranking</h3>
-            <p>nota composta por alcance, salvamentos, compartilhamentos, comentários e sinais de negócio</p>
-          </div>
-          {medidos.map((p) => {
-            const nota = scores[p.id] ?? 0;
-            return (
-              <div key={p.id} className="vault-rank-row">
-                <div className="vault-rank-title">{p.tema}</div>
-                <div className="vault-rank-track">
-                  <div style={{ width: `${nota}%` }} />
-                </div>
-                <div className="vault-rank-score">{nota}</div>
-              </div>
-            );
-          })}
-        </section>
-      )}
-
-      {/* A MEDIR — a fila de ação (publicados sem números) */}
-      <section className="studio-section studio-section--pad">
-        <div className="studio-section-head">
-          <h3>A medir</h3>
-          <p>{aMedir.length} publicado(s) esperando números e feedback</p>
-        </div>
-        {aMedir.length === 0
-          ? <div className="studio-empty">Tudo medido. Nada na fila</div>
-          : <div className="vault-card-list">{aMedir.map(card)}</div>}
-      </section>
-
-      {/* MEDIDOS — recolhido; o card vem pra cá quando você loga (sai da fila de cima) */}
-      {medidos.length > 0 && (
+      {/* CARROSSÉIS CRIADOS NO APP (recolhido) */}
+      {posts.length > 0 && (
         <section className="studio-section studio-section--pad">
           <button onClick={() => setShowMedidos((s) => !s)} className="vault-toggle">
             <span className={showMedidos ? "is-open" : ""}>▶</span>
-            Medidos / aprendidos ({medidos.length})
+            Carrosséis criados no app ({posts.length})
           </button>
-          {showMedidos && <div className="vault-card-list" style={{ marginTop: 12 }}>{medidos.map(card)}</div>}
+          {showMedidos && <div className="vault-card-list" style={{ marginTop: 12 }}>{posts.map(card)}</div>}
         </section>
       )}
 
