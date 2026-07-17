@@ -32,6 +32,32 @@ export async function upsertPost(post: Post): Promise<Post> {
   return post;
 }
 
+function jsonbSafe<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value).replace(/\\u0000/g, "")) as T;
+}
+
+export async function upsertPosts(posts: Post[]): Promise<Post[]> {
+  if (!posts.length) return posts;
+  const now = new Date().toISOString();
+  const cleanPosts = posts.map(jsonbSafe);
+  const chunkSize = 50;
+  for (let i = 0; i < cleanPosts.length; i += chunkSize) {
+    const chunk = cleanPosts.slice(i, i + chunkSize);
+    const { error } = await sb.from("posts").upsert(chunk.map((post) => ({
+      id: post.id,
+      data: post,
+      stage: post.stage || "ideia",
+      scheduled_at: post.scheduledAt || null,
+      updated_at: now,
+    })));
+    if (error) {
+      console.error("upsertPosts", error.message);
+      throw new Error(error.message);
+    }
+  }
+  return cleanPosts;
+}
+
 export async function deletePost(id: string): Promise<void> {
   const { error } = await sb.from("posts").delete().eq("id", id);
   if (error) console.error("deletePost", error.message);
@@ -180,6 +206,23 @@ export async function getStoryLearnings(): Promise<StoryLearnings | null> {
 export async function setStoryLearnings(l: StoryLearnings): Promise<void> {
   await sb.from("kv").upsert({ key: "story_learnings", value: l });
 }
+
+// ---- HISTÓRICO DE SUGESTÕES JÁ GERADAS (anti-repetição: o gerador nunca mais repete o que já saiu) ----
+async function getRecentList(key: string): Promise<string[]> {
+  const { data } = await sb.from("kv").select("value").eq("key", key).maybeSingle();
+  return (data?.value as string[]) || [];
+}
+async function addRecentList(key: string, itens: string[], max: number): Promise<void> {
+  const cur = await getRecentList(key);
+  const limpos = itens.map(t => (t || "").trim()).filter(Boolean);
+  const next = [...limpos, ...cur].slice(0, max);
+  const { error } = await sb.from("kv").upsert({ key, value: next });
+  if (error) console.error("addRecentList " + key, error.message);
+}
+export const getRecentTemas = () => getRecentList("temas_recentes");
+export const addRecentTemas = (t: string[]) => addRecentList("temas_recentes", t, 160);
+export const getRecentReelIdeas = () => getRecentList("reel_ideas_recentes");
+export const addRecentReelIdeas = (t: string[]) => addRecentList("reel_ideas_recentes", t, 160);
 
 // ---- APRENDIZADO DOS CAMPEÕES DO INSTAGRAM (o que performou de verdade → alimenta a geração) ----
 export interface WinnerLearnings { updatedAt: string; n: number; summary: string }

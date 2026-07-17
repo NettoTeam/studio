@@ -196,6 +196,7 @@ function buildUserMsg(args: {
   funilBlock: string;
   tomBlock: string;
   trendBlock: string;
+  banBlock: string;
   focus: string;
 }) {
   const formatosStr = args.formatos.map(f => FORMATO_LABEL[f]).join(", ");
@@ -207,7 +208,7 @@ function buildUserMsg(args: {
 
 ${args.reguaBlock}${args.histBlock}${args.learnBlock}${args.goldBlock}${args.rejectBlock}${args.ctxBlock}${args.funilBlock}${args.tomBlock}
 
-${REELS_TRANSCRICOES}${args.trendBlock}
+${REELS_TRANSCRICOES}${args.trendBlock}${args.banBlock}
 
 ═══════════════════════════════════════════
 FORMATOS PARA ESTA GERAÇÃO: ${formatosStr}
@@ -291,10 +292,20 @@ export async function POST(req: Request) {
   const funil = body.funil || null;
   const reg = body.registro || null;
 
-  const { getAudience, getEdge, getBrainModel, getGold, getRejects, getReelLearnings, getWinnerLearnings } = await import("@/lib/store");
-  const [aud, edg, model, gold, rejects, reelLearnings, winner] = await Promise.all([
+  const { getAudience, getEdge, getBrainModel, getGold, getRejects, getReelLearnings, getWinnerLearnings, getRecentReelIdeas, addRecentReelIdeas, listReelIdeas } = await import("@/lib/store");
+  const [aud, edg, model, gold, rejects, reelLearnings, winner, recentesReel, salvasReel] = await Promise.all([
     getAudience(), getEdge(), getBrainModel(), getGold(), getRejects("voice"), getReelLearnings(), getWinnerLearnings().catch(() => null),
+    getRecentReelIdeas().catch(() => [] as string[]), listReelIdeas().catch(() => []),
   ]);
+
+  // tudo que já foi sugerido antes (gerado ou salvo no banco) vira lista de banidos
+  const banidosReel = [...recentesReel, ...salvasReel.map(i => i.titulo)]
+    .map(t => (t || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, 130);
+  const banBlock = banidosReel.length
+    ? `\n\n🚫 JÁ SUGERIDOS ANTES — PROIBIDO REPETIR (${banidosReel.length} ideias). Não repita nem "primos": mesmo tema com outro título, mesmo ângulo com outras palavras, ou variação leve. Se a ideia que você pensou está aqui ou é parente dela, DESCARTA e vai pra território novo:\n${banidosReel.map(t => `✗ ${t.slice(0, 90)}`).join("\n")}`
+    : "";
 
   const reguaBlock = `PÚBLICO-ALVO: ${aud}\n\nARESTA E CARA DO CÂNDIDO: ${edg}`;
   const histBlock = model.historia?.trim()
@@ -344,6 +355,7 @@ export async function POST(req: Request) {
         funilBlock,
         tomBlock,
         trendBlock: batch.formatos.includes("pov_trend") ? trendBlock : "",
+        banBlock,
         focus: batch.focus,
       }),
       batch
@@ -358,6 +370,9 @@ export async function POST(req: Request) {
     );
 
     if (!generated.length) throw new Error(errors[0] || "Não consegui gerar as ideias. Tenta de novo.");
+
+    // guarda no histórico pra nunca mais repetir estas
+    addRecentReelIdeas(generated.map(i => i.titulo)).catch(() => {});
 
     const warning = generated.length < nIdeas
       ? `Gerei ${generated.length} de ${nIdeas} ideias porque um lote demorou ou voltou fora do formato. Pode clicar em gerar de novo para completar.`
